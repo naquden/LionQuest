@@ -29,6 +29,7 @@ namespace LionQuest.Character
         private Rigidbody2D rb;
         private SPUM_Prefabs spumPrefabs;
         private Transform spriteTransform; // SPUM uses transform scale for flipping
+        private TileInteractionManager tileInteractionManager; // For tile-based movement modifiers
         private Vector2 movement;
         private Keyboard keyboard;
         private float lastAttackTime = 0f;
@@ -80,6 +81,13 @@ namespace LionQuest.Character
             
             // Get keyboard reference
             keyboard = Keyboard.current;
+            
+            // Try to find TileInteractionManager (optional - for tile-based movement modifiers)
+            tileInteractionManager = GetComponent<TileInteractionManager>();
+            if (tileInteractionManager == null)
+            {
+                tileInteractionManager = FindObjectOfType<TileInteractionManager>();
+            }
             
             // Check for SPUM_Prefabs
             if (spumPrefabs == null)
@@ -405,8 +413,15 @@ namespace LionQuest.Character
                 // Normalize movement to ensure consistent speed in all directions (including diagonal)
                 Vector2 normalizedMovement = movement.normalized;
                 
-                // Calculate desired velocity
-                Vector2 desiredVelocity = normalizedMovement * maxSpeed;
+                // Get movement speed multiplier from current tile (if TileInteractionManager exists)
+                float speedMultiplier = 1.0f;
+                if (tileInteractionManager != null)
+                {
+                    speedMultiplier = tileInteractionManager.GetMovementSpeedMultiplier();
+                }
+                
+                // Calculate desired velocity with tile-based speed modifier
+                Vector2 desiredVelocity = normalizedMovement * maxSpeed * speedMultiplier;
                 
                 // Calculate the force needed to reach desired velocity
                 Vector2 velocityChange = desiredVelocity - rb.linearVelocity;

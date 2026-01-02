@@ -269,8 +269,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 865e87b9d2c844ba3af4cadddfc4a1c8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TopDownCameraController
-  target: {fileID: 0}
-  distance: 1
+  target: {fileID: 1979961571}
+  distance: 5
   height: 10
   followSpeed: 10
   lookAtOffset: {x: 0, y: 0, z: 0}
@@ -601,7 +601,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0.39
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalPosition.y
@@ -609,11 +609,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.71
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalRotation.x
@@ -621,7 +621,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalRotation.z
@@ -633,7 +633,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: 180
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -646,8 +646,117 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1979961572}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1979961574}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1979961573}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1979961575}
   m_SourcePrefab: {fileID: 100100000, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+--- !u!1 &1979961570 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+  m_PrefabInstance: {fileID: 1423104095}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1979961571 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+  m_PrefabInstance: {fileID: 1423104095}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &1979961572
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1979961570}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 97fe6ea4cb335447590133f7d72a126d, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &1979961573
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1979961570}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e113220ade4fd47019168c71fc79a7ae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TopDownPlayerController
+  moveSpeed: 5
+  sprintMultiplier: 1.5
+  rotationSpeed: 10
+  rotateTowardsMovement: 1
+  groundLevel: 0
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  characterAnimator: {fileID: 1979961575}
+--- !u!143 &1979961574
+CharacterController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1979961570}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Height: 2
+  m_Radius: 0.5
+  m_SlopeLimit: 45
+  m_StepOffset: 0.3
+  m_SkinWidth: 0.08
+  m_MinMoveDistance: 0.001
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &1979961575
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1979961570}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 467d8ffb29bdb47c3bc7fff4a5c7a948, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterAnimator
+  speedParameter: Speed
+  isWalkingParameter: IsWalking
+  isSprintingParameter: IsSprinting
+  attackTriggerParameter: Attack
+  attackTypeParameter: AttackType
+  dieTriggerParameter: Die
+  ariseTriggerParameter: Arise
+  isDeadParameter: IsDead
+  debugLog: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

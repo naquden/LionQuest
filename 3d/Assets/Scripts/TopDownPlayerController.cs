@@ -184,11 +184,12 @@ public class TopDownPlayerController : MonoBehaviour
             }
         }
         
-        // Update animations
+        // Update animations (Unity 6 standard: Speed parameter for smooth blending)
         if (characterAnimator != null)
         {
-            // Normalize speed to 0-1 range for animation (or use actual speed)
-            float normalizedSpeed = isCurrentlyMoving ? Mathf.Clamp01(moveDirection.magnitude) : 0f;
+            // Set speed to 1.0 when moving, 0.0 when idle (Unity 6 standard)
+            // This allows smooth blending between Idle and Walk states
+            float normalizedSpeed = isCurrentlyMoving ? 1.0f : 0.0f;
             characterAnimator.UpdateAnimations(isCurrentlyMoving, normalizedSpeed, isSprinting);
         }
         

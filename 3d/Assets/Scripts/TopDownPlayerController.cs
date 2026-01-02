@@ -29,6 +29,10 @@ public class TopDownPlayerController : MonoBehaviour
     private CharacterController characterController;
     private InputAction moveAction;
     private InputAction sprintAction;
+    private InputAction attackAction;
+    private InputAction skill1Action;
+    private InputAction skill2Action;
+    private InputAction skill3Action;
     private Vector3 moveDirection;
     private float currentSpeed;
     private float lockedYPosition;
@@ -71,6 +75,10 @@ public class TopDownPlayerController : MonoBehaviour
             inputActions.Enable();
             moveAction = inputActions.FindAction("Player/Move");
             sprintAction = inputActions.FindAction("Player/Sprint");
+            attackAction = inputActions.FindAction("Player/Attack");
+            skill1Action = inputActions.FindAction("Player/Skill1");
+            skill2Action = inputActions.FindAction("Player/Skill2");
+            skill3Action = inputActions.FindAction("Player/Skill3");
             
             if (moveAction == null)
             {
@@ -88,6 +96,42 @@ public class TopDownPlayerController : MonoBehaviour
             else
             {
                 sprintAction.Enable();
+            }
+            
+            if (attackAction == null)
+            {
+                Debug.LogWarning($"TopDownPlayerController: Could not find 'Player/Attack' action. Attack functionality will be disabled.");
+            }
+            else
+            {
+                attackAction.Enable();
+            }
+            
+            if (skill1Action == null)
+            {
+                Debug.LogWarning($"TopDownPlayerController: Could not find 'Player/Skill1' action. Skill1 functionality will be disabled.");
+            }
+            else
+            {
+                skill1Action.Enable();
+            }
+            
+            if (skill2Action == null)
+            {
+                Debug.LogWarning($"TopDownPlayerController: Could not find 'Player/Skill2' action. Skill2 functionality will be disabled.");
+            }
+            else
+            {
+                skill2Action.Enable();
+            }
+            
+            if (skill3Action == null)
+            {
+                Debug.LogWarning($"TopDownPlayerController: Could not find 'Player/Skill3' action. Skill3 functionality will be disabled.");
+            }
+            else
+            {
+                skill3Action.Enable();
             }
         }
         else
@@ -127,6 +171,8 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         HandleMovement();
+        HandleAttack();
+        HandleSkills();
         LockYPosition();
     }
     
@@ -198,6 +244,47 @@ public class TopDownPlayerController : MonoBehaviour
         if (proceduralAnim != null)
         {
             proceduralAnim.SetMoving(isCurrentlyMoving);
+        }
+    }
+    
+    private void HandleAttack()
+    {
+        // Check if attack button was pressed this frame
+        if (attackAction != null && attackAction.WasPressedThisFrame())
+        {
+            // Trigger attack animation
+            if (characterAnimator != null)
+            {
+                characterAnimator.TriggerAttack(0); // Default to light attack (type 0)
+            }
+        }
+    }
+    
+    private void HandleSkills()
+    {
+        // Check if skill buttons were pressed this frame
+        if (skill1Action != null && skill1Action.WasPressedThisFrame())
+        {
+            if (characterAnimator != null)
+            {
+                characterAnimator.TriggerSkill1();
+            }
+        }
+        
+        if (skill2Action != null && skill2Action.WasPressedThisFrame())
+        {
+            if (characterAnimator != null)
+            {
+                characterAnimator.TriggerSkill2();
+            }
+        }
+        
+        if (skill3Action != null && skill3Action.WasPressedThisFrame())
+        {
+            if (characterAnimator != null)
+            {
+                characterAnimator.TriggerSkill3();
+            }
         }
     }
     

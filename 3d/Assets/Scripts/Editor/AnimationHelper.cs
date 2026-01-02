@@ -178,6 +178,9 @@ public class AnimationHelper : EditorWindow
         controller.AddParameter("Die", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("Arise", AnimatorControllerParameterType.Trigger);
         controller.AddParameter("IsDead", AnimatorControllerParameterType.Bool);
+        controller.AddParameter("Skill1", AnimatorControllerParameterType.Trigger);
+        controller.AddParameter("Skill2", AnimatorControllerParameterType.Trigger);
+        controller.AddParameter("Skill3", AnimatorControllerParameterType.Trigger);
         
         // Get the root state machine
         AnimatorStateMachine rootStateMachine = controller.layers[0].stateMachine;
@@ -188,6 +191,9 @@ public class AnimationHelper : EditorWindow
         AnimatorState attackState = rootStateMachine.AddState("Attack");
         AnimatorState dieState = rootStateMachine.AddState("Die");
         AnimatorState ariseState = rootStateMachine.AddState("Arise");
+        AnimatorState skill1State = rootStateMachine.AddState("Skill1");
+        AnimatorState skill2State = rootStateMachine.AddState("Skill2");
+        AnimatorState skill3State = rootStateMachine.AddState("Skill3");
         
         // Set Idle as default state
         rootStateMachine.defaultState = idleState;
@@ -234,6 +240,42 @@ public class AnimationHelper : EditorWindow
         ariseToIdle.hasExitTime = true;
         ariseToIdle.exitTime = 0.9f;
         ariseToIdle.duration = 0.1f;
+        
+        // Any state -> Skill1
+        AnimatorStateTransition anyToSkill1 = rootStateMachine.AddAnyStateTransition(skill1State);
+        anyToSkill1.AddCondition(AnimatorConditionMode.If, 0, "Skill1");
+        anyToSkill1.hasExitTime = false;
+        anyToSkill1.duration = 0.1f;
+        
+        // Skill1 -> Idle (after skill completes)
+        AnimatorStateTransition skill1ToIdle = skill1State.AddTransition(idleState);
+        skill1ToIdle.hasExitTime = true;
+        skill1ToIdle.exitTime = 0.9f;
+        skill1ToIdle.duration = 0.1f;
+        
+        // Any state -> Skill2
+        AnimatorStateTransition anyToSkill2 = rootStateMachine.AddAnyStateTransition(skill2State);
+        anyToSkill2.AddCondition(AnimatorConditionMode.If, 0, "Skill2");
+        anyToSkill2.hasExitTime = false;
+        anyToSkill2.duration = 0.1f;
+        
+        // Skill2 -> Idle (after skill completes)
+        AnimatorStateTransition skill2ToIdle = skill2State.AddTransition(idleState);
+        skill2ToIdle.hasExitTime = true;
+        skill2ToIdle.exitTime = 0.9f;
+        skill2ToIdle.duration = 0.1f;
+        
+        // Any state -> Skill3
+        AnimatorStateTransition anyToSkill3 = rootStateMachine.AddAnyStateTransition(skill3State);
+        anyToSkill3.AddCondition(AnimatorConditionMode.If, 0, "Skill3");
+        anyToSkill3.hasExitTime = false;
+        anyToSkill3.duration = 0.1f;
+        
+        // Skill3 -> Idle (after skill completes)
+        AnimatorStateTransition skill3ToIdle = skill3State.AddTransition(idleState);
+        skill3ToIdle.hasExitTime = true;
+        skill3ToIdle.exitTime = 0.9f;
+        skill3ToIdle.duration = 0.1f;
         
         // Save the controller
         AssetDatabase.SaveAssets();

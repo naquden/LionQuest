@@ -36,7 +36,7 @@ ModelImporter:
     extraUserProperties: []
     clipAnimations:
     - serializedVersion: 16
-      name: Dance
+      name: AssCap_Dance
       takeName: All_Night_Dance
       internalID: 6613532755395891077
       firstFrame: 0
@@ -65,7 +65,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Die
+      name: AssCap_Die
       takeName: Arise
       internalID: -5175492307695106804
       firstFrame: 0
@@ -94,7 +94,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Look
+      name: AssCap_Look
       takeName: Attack
       internalID: 6720303635017113406
       firstFrame: 0
@@ -123,7 +123,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Running
+      name: AssCap_Run
       takeName: Boom_Dance
       internalID: 6243895089619623487
       firstFrame: 0
@@ -152,7 +152,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Skill3
+      name: AssCap_Skill3
       takeName: Dead
       internalID: 8273325049105940540
       firstFrame: 0
@@ -181,7 +181,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Attack2
+      name: AssCap_Skill1
       takeName: Idle
       internalID: -3100369314251171874
       firstFrame: 0
@@ -210,7 +210,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Arise
+      name: AssCap_Arise
       takeName: Running
       internalID: -9121621101649706817
       firstFrame: 0
@@ -239,7 +239,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Attack
+      name: AssCap_Attack
       takeName: Skill_01
       internalID: 8435452027487919885
       firstFrame: 0
@@ -268,7 +268,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Skill2
+      name: AssCap_Skill2
       takeName: Skill_03
       internalID: -7951308697055104129
       firstFrame: 0
@@ -297,7 +297,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Walk
+      name: AssCap_Walk
       takeName: Triple_Combo_Attack
       internalID: 4272350386825326460
       firstFrame: 0
@@ -326,7 +326,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: Empty
+      name: AssCap_Empty
       takeName: Walking
       internalID: -1610863427237328480
       firstFrame: 0
@@ -355,7 +355,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: DanceDisco
+      name: AssCap_Dance_alt
       takeName: Character_output.fbx
       internalID: -2498671889216865470
       firstFrame: 0

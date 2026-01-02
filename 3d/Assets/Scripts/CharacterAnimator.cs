@@ -25,6 +25,16 @@ public class CharacterAnimator : MonoBehaviour
     [Tooltip("Name of the integer parameter for attack type (0 = light, 1 = heavy, etc.)")]
     [SerializeField] private string attackTypeParameter = "AttackType";
     
+    [Header("Skill Parameters")]
+    [Tooltip("Name of the trigger parameter for skill 1 animation")]
+    [SerializeField] private string skill1TriggerParameter = "Skill1";
+    
+    [Tooltip("Name of the trigger parameter for skill 2 animation")]
+    [SerializeField] private string skill2TriggerParameter = "Skill2";
+    
+    [Tooltip("Name of the trigger parameter for skill 3 animation")]
+    [SerializeField] private string skill3TriggerParameter = "Skill3";
+    
     [Header("State Parameters")]
     [Tooltip("Name of the trigger parameter for death animation")]
     [SerializeField] private string dieTriggerParameter = "Die";
@@ -50,6 +60,9 @@ public class CharacterAnimator : MonoBehaviour
     private bool hasDieTriggerParam;
     private bool hasAriseTriggerParam;
     private bool hasIsDeadParam;
+    private bool hasSkill1TriggerParam;
+    private bool hasSkill2TriggerParam;
+    private bool hasSkill3TriggerParam;
     
     // State tracking
     private bool isDead = false;
@@ -84,6 +97,9 @@ public class CharacterAnimator : MonoBehaviour
         hasDieTriggerParam = HasParameter(dieTriggerParameter, AnimatorControllerParameterType.Trigger);
         hasAriseTriggerParam = HasParameter(ariseTriggerParameter, AnimatorControllerParameterType.Trigger);
         hasIsDeadParam = HasParameter(isDeadParameter, AnimatorControllerParameterType.Bool);
+        hasSkill1TriggerParam = HasParameter(skill1TriggerParameter, AnimatorControllerParameterType.Trigger);
+        hasSkill2TriggerParam = HasParameter(skill2TriggerParameter, AnimatorControllerParameterType.Trigger);
+        hasSkill3TriggerParam = HasParameter(skill3TriggerParameter, AnimatorControllerParameterType.Trigger);
         
         // Log available parameters for debugging
         if (debugLog)
@@ -174,6 +190,81 @@ public class CharacterAnimator : MonoBehaviour
     public void OnAttackComplete()
     {
         isAttacking = false;
+    }
+    
+    /// <summary>
+    /// Triggers skill 1 animation
+    /// </summary>
+    public void TriggerSkill1()
+    {
+        if (animator == null || !animator.enabled || isDead)
+        {
+            return; // Can't use skills if dead
+        }
+        
+        if (hasSkill1TriggerParam)
+        {
+            animator.SetTrigger(skill1TriggerParameter);
+            
+            if (debugLog)
+            {
+                Debug.Log("CharacterAnimator: Triggered Skill1");
+            }
+        }
+        else if (debugLog)
+        {
+            Debug.LogWarning($"CharacterAnimator: Skill1 trigger parameter '{skill1TriggerParameter}' not found in Animator Controller!");
+        }
+    }
+    
+    /// <summary>
+    /// Triggers skill 2 animation
+    /// </summary>
+    public void TriggerSkill2()
+    {
+        if (animator == null || !animator.enabled || isDead)
+        {
+            return; // Can't use skills if dead
+        }
+        
+        if (hasSkill2TriggerParam)
+        {
+            animator.SetTrigger(skill2TriggerParameter);
+            
+            if (debugLog)
+            {
+                Debug.Log("CharacterAnimator: Triggered Skill2");
+            }
+        }
+        else if (debugLog)
+        {
+            Debug.LogWarning($"CharacterAnimator: Skill2 trigger parameter '{skill2TriggerParameter}' not found in Animator Controller!");
+        }
+    }
+    
+    /// <summary>
+    /// Triggers skill 3 animation
+    /// </summary>
+    public void TriggerSkill3()
+    {
+        if (animator == null || !animator.enabled || isDead)
+        {
+            return; // Can't use skills if dead
+        }
+        
+        if (hasSkill3TriggerParam)
+        {
+            animator.SetTrigger(skill3TriggerParameter);
+            
+            if (debugLog)
+            {
+                Debug.Log("CharacterAnimator: Triggered Skill3");
+            }
+        }
+        else if (debugLog)
+        {
+            Debug.LogWarning($"CharacterAnimator: Skill3 trigger parameter '{skill3TriggerParameter}' not found in Animator Controller!");
+        }
     }
     
     /// <summary>
@@ -288,6 +379,9 @@ public class CharacterAnimator : MonoBehaviour
         animator.ResetTrigger(attackTriggerParameter);
         animator.ResetTrigger(dieTriggerParameter);
         animator.ResetTrigger(ariseTriggerParameter);
+        animator.ResetTrigger(skill1TriggerParameter);
+        animator.ResetTrigger(skill2TriggerParameter);
+        animator.ResetTrigger(skill3TriggerParameter);
     }
     
     /// <summary>

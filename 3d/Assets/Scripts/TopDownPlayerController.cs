@@ -238,13 +238,6 @@ public class TopDownPlayerController : MonoBehaviour
             float normalizedSpeed = isCurrentlyMoving ? 1.0f : 0.0f;
             characterAnimator.UpdateAnimations(isCurrentlyMoving, normalizedSpeed, isSprinting);
         }
-        
-        // Update procedural animation if present
-        SimpleProceduralAnimation proceduralAnim = GetComponent<SimpleProceduralAnimation>();
-        if (proceduralAnim != null)
-        {
-            proceduralAnim.SetMoving(isCurrentlyMoving);
-        }
     }
     
     private void HandleAttack()

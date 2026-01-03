@@ -152,7 +152,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: 67_Skill2
+      name: 67_Skill1
       takeName: Boom_Dance_frame_rate_60.fbx
       internalID: 1436442609468331083
       firstFrame: 0
@@ -413,7 +413,7 @@ ModelImporter:
       maskSource: {instanceID: 0}
       additiveReferencePoseFrame: 0
     - serializedVersion: 16
-      name: 67_Skill1
+      name: 67_Skill2
       takeName: Character_output.fbx
       internalID: -2498671889216865470
       firstFrame: 0

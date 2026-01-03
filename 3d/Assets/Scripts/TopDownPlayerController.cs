@@ -12,6 +12,13 @@ public class TopDownPlayerController : MonoBehaviour
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float sprintMultiplier = 1.5f;
     
+    [Header("Ground Detection")]
+    [Tooltip("MapGenerator that contains the ground type map. If not assigned, will try to find it in scene.")]
+    [SerializeField] private MapGenerator mapGenerator;
+    
+    [Tooltip("Enable debug logging for ground detection")]
+    [SerializeField] private bool debugGroundDetection = false;
+    
     [Header("Rotation Settings")]
     [SerializeField] private float rotationSpeed = 10f;
     [SerializeField] private bool rotateTowardsMovement = true;
@@ -37,6 +44,9 @@ public class TopDownPlayerController : MonoBehaviour
     private float currentSpeed;
     private float lockedYPosition;
     private bool isCurrentlyMoving = false;
+    private bool isFalling = false;
+    private float fallSpeed = 0f;
+    private GroundType currentGroundType;
     
     /// <summary>
     /// Returns whether the character is currently moving
@@ -144,6 +154,12 @@ public class TopDownPlayerController : MonoBehaviour
         {
             characterAnimator = GetComponent<CharacterAnimator>();
         }
+        
+        // Try to find MapGenerator if not assigned
+        if (mapGenerator == null)
+        {
+            mapGenerator = FindObjectOfType<MapGenerator>();
+        }
     }
     
     private void OnEnable()
@@ -170,6 +186,7 @@ public class TopDownPlayerController : MonoBehaviour
             characterController.enabled = true;
         }
         
+        DetectGround();
         HandleMovement();
         HandleAttack();
         HandleSkills();
@@ -195,7 +212,60 @@ public class TopDownPlayerController : MonoBehaviour
         
         // Check if sprinting
         bool isSprinting = sprintAction != null && sprintAction.IsPressed();
-        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f);
+        
+        // Get ground type speed multiplier
+        float groundSpeedMultiplier = 1f;
+        if (currentGroundType != null)
+        {
+            groundSpeedMultiplier = currentGroundType.movementSpeedMultiplier;
+            
+            if (debugGroundDetection && isCurrentlyMoving)
+            {
+                Debug.Log($"Ground Type: {currentGroundType.groundName}, Speed Multiplier: {groundSpeedMultiplier}");
+            }
+            
+            // Check if player is on a hole and should fall through
+            if (currentGroundType.isHole && !isFalling)
+            {
+                // Start falling through hole
+                isFalling = true;
+                fallSpeed = 0f;
+                fallSpeed = currentGroundType.fallSpeedMultiplier;
+            }
+        }
+        else
+        {
+            // If no ground type detected, use default speed (no multiplier)
+            groundSpeedMultiplier = 1f;
+            if (debugGroundDetection)
+            {
+                Debug.LogWarning("No ground type detected! Make sure MapGenerator has generated the map and is in the scene.");
+            }
+        }
+        
+        // Handle falling through holes
+        if (isFalling)
+        {
+            // Apply gravity/falling
+            fallSpeed += Physics.gravity.magnitude * Time.deltaTime;
+            characterController.Move(Vector3.down * fallSpeed * Time.deltaTime);
+            
+            // Check if we've fallen below a certain threshold (could respawn or trigger death)
+            if (transform.position.y < groundLevel - 50f)
+            {
+                // Player has fallen too far - could respawn or trigger death
+                // For now, stop falling and reset position
+                isFalling = false;
+                Vector3 pos = transform.position;
+                pos.y = lockedYPosition;
+                transform.position = pos;
+            }
+            
+            // Don't allow normal movement while falling
+            return;
+        }
+        
+        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier;
         
         // Convert 2D input to 3D movement on X-Z plane
         moveDirection = new Vector3(input.x, 0f, input.y);
@@ -285,12 +355,44 @@ public class TopDownPlayerController : MonoBehaviour
     {
         // Constantly lock the Y position to prevent any vertical movement
         // Only do this if the GameObject and CharacterController are active
-        if (characterController != null && characterController.enabled && gameObject.activeInHierarchy)
+        // Don't lock Y if player is falling through a hole
+        if (characterController != null && characterController.enabled && gameObject.activeInHierarchy && !isFalling)
         {
             Vector3 position = transform.position;
             position.y = lockedYPosition;
             transform.position = position;
         }
+        
+        // Reset falling state if we're back on solid ground
+        if (isFalling && currentGroundType != null && !currentGroundType.isHole)
+        {
+            // Check if we're back at ground level
+            if (Mathf.Abs(transform.position.y - lockedYPosition) < 0.5f)
+            {
+                isFalling = false;
+                fallSpeed = 0f;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Detects the ground type at the player's position
+    /// </summary>
+    private void DetectGround()
+    {
+        // Try to find MapGenerator if not assigned
+        if (mapGenerator == null)
+        {
+            mapGenerator = FindObjectOfType<MapGenerator>();
+            if (mapGenerator == null)
+            {
+                currentGroundType = null;
+                return;
+            }
+        }
+        
+        // Get ground type from MapGenerator
+        currentGroundType = mapGenerator.GetGroundTypeAtPosition(transform.position);
     }
     
     private void OnDrawGizmosSelected()
@@ -300,6 +402,13 @@ public class TopDownPlayerController : MonoBehaviour
         {
             Gizmos.color = Color.green;
             Gizmos.DrawRay(transform.position, moveDirection * 2f);
+        }
+        
+        // Draw ground type indicator
+        if (currentGroundType != null)
+        {
+            Gizmos.color = currentGroundType.biomeColor;
+            Gizmos.DrawWireSphere(transform.position, 0.5f);
         }
     }
 }

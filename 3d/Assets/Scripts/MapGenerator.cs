@@ -12,6 +12,14 @@ public class MapGenerator : MonoBehaviour
     [Tooltip("Size of the map in Unity units")]
     [SerializeField] private Vector2Int mapSize = new Vector2Int(200, 200);
     
+    /// <summary>
+    /// Gets the map size (public for boundary checking)
+    /// </summary>
+    public Vector2 GetMapSize()
+    {
+        return new Vector2(mapSize.x, mapSize.y);
+    }
+    
     [Tooltip("Height of the terrain")]
     [SerializeField] private float terrainHeight = 20f;
     
@@ -84,6 +92,20 @@ public class MapGenerator : MonoBehaviour
             Debug.Log("MapGenerator: Creating new TerrainData...");
             terrainData = new TerrainData();
             terrain.terrainData = terrainData;
+        }
+        
+        // Ensure TerrainCollider exists for physics collision
+        TerrainCollider terrainCollider = GetComponent<TerrainCollider>();
+        if (terrainCollider == null)
+        {
+            Debug.Log("MapGenerator: Adding TerrainCollider for physics collision...");
+            terrainCollider = gameObject.AddComponent<TerrainCollider>();
+            terrainCollider.terrainData = terrainData;
+        }
+        else if (terrainCollider.terrainData != terrainData)
+        {
+            // Update collider if terrain data changed
+            terrainCollider.terrainData = terrainData;
         }
     }
     
@@ -497,14 +519,6 @@ public class MapGenerator : MonoBehaviour
         y = Mathf.Clamp(y, 0, terrainResolution - 1);
         
         GroundType groundType = groundTypeMap[x, y];
-        
-        // Debug output (can be removed later)
-        #if UNITY_EDITOR
-        if (Application.isPlaying && Time.frameCount % 60 == 0) // Log every 60 frames to avoid spam
-        {
-            Debug.Log($"GetGroundTypeAtPosition: WorldPos={worldPosition}, LocalPos={localPos}, MapCoords=({x},{y}), GroundType={(groundType != null ? groundType.groundName : "null")}");
-        }
-        #endif
         
         return groundType;
     }

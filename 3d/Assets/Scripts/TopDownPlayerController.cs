@@ -2,15 +2,22 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Top-down player controller with 4-directional movement (left, right, up, down)
-/// Movement is locked to the X-Z plane (no Y-axis movement)
+/// Top-down player controller with 4-directional movement using Rigidbody forces
+/// Uses physics-based movement for interaction with environment forces
 /// </summary>
-[RequireComponent(typeof(CharacterController))]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(CapsuleCollider))]
 public class TopDownPlayerController : MonoBehaviour
 {
     [Header("Movement Settings")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float sprintMultiplier = 1.5f;
+    [Tooltip("Force applied for movement (higher = faster acceleration)")]
+    [SerializeField] private float moveForce = 50f;
+    [Tooltip("Force applied to stop movement (higher = stops faster)")]
+    [SerializeField] private float stopForce = 200f;
+    [Tooltip("Drag to slow down movement (higher = stops faster)")]
+    [SerializeField] private float drag = 5f;
     
     [Header("Ground Detection")]
     [Tooltip("MapGenerator that contains the ground type map. If not assigned, will try to find it in scene.")]
@@ -25,6 +32,10 @@ public class TopDownPlayerController : MonoBehaviour
     
     [Header("Ground Settings")]
     [SerializeField] private float groundLevel = 0f; // Y position where the ground is
+    [Tooltip("Distance to check if player is on ground")]
+    [SerializeField] private float groundCheckDistance = 0.1f;
+    [Tooltip("Layer mask for ground detection")]
+    [SerializeField] private LayerMask groundLayerMask = -1;
     
     [Header("References")]
     [SerializeField] private InputActionAsset inputActions;
@@ -33,7 +44,7 @@ public class TopDownPlayerController : MonoBehaviour
     [Tooltip("CharacterAnimator component for handling animations. Leave empty if not using animations.")]
     [SerializeField] private CharacterAnimator characterAnimator;
     
-    private CharacterController characterController;
+    private Rigidbody rb;
     private InputAction moveAction;
     private InputAction sprintAction;
     private InputAction attackAction;
@@ -42,10 +53,9 @@ public class TopDownPlayerController : MonoBehaviour
     private InputAction skill3Action;
     private Vector3 moveDirection;
     private float currentSpeed;
-    private float lockedYPosition;
     private bool isCurrentlyMoving = false;
     private bool isFalling = false;
-    private float fallSpeed = 0f;
+    private bool isGrounded = false;
     private GroundType currentGroundType;
     
     /// <summary>
@@ -55,28 +65,40 @@ public class TopDownPlayerController : MonoBehaviour
     
     private void Awake()
     {
-        characterController = GetComponent<CharacterController>();
+        rb = GetComponent<Rigidbody>();
         
-        // Ensure CharacterController exists and is enabled
-        if (characterController == null)
+        // Ensure Rigidbody exists
+        if (rb == null)
         {
-            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': CharacterController component is missing!");
+            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Rigidbody component is missing!");
             return;
         }
         
-        // Ensure CharacterController is enabled
-        characterController.enabled = true;
+        // Ensure Collider exists
+        CapsuleCollider collider = GetComponent<CapsuleCollider>();
+        if (collider == null)
+        {
+            Debug.LogWarning($"TopDownPlayerController: Adding CapsuleCollider for physics collision...");
+            collider = gameObject.AddComponent<CapsuleCollider>();
+            collider.height = 2f;
+            collider.radius = 0.5f;
+            collider.center = new Vector3(0, 1f, 0); // Center at half height
+        }
         
-        // Calculate Y position so the bottom of the CharacterController is at ground level
-        // Bottom of CharacterController = transform.position.y + center.y - height/2
-        // We want: transform.position.y + center.y - height/2 = groundLevel
-        // So: transform.position.y = groundLevel - center.y + height/2
-        float bottomOffset = characterController.center.y - (characterController.height * 0.5f);
-        lockedYPosition = groundLevel - bottomOffset;
+        // Configure Rigidbody for top-down movement (Unity 6 best practices)
+        rb.useGravity = true;
+        rb.linearDamping = drag; // Unity 6: Use linearDamping instead of drag
+        rb.angularDamping = 0f; // Prevent rotation from forces
+        rb.freezeRotation = true; // Lock rotation on all axes (prevents unwanted rotation)
+        rb.interpolation = RigidbodyInterpolation.Interpolate; // Smooth visual movement between physics updates
         
-        // Set the initial position
+        // Unity 6 best practice: Use Continuous collision detection for fast-moving characters
+        // Prevents "tunneling" through colliders at high speeds
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        
+        // Set initial position at ground level
         Vector3 position = transform.position;
-        position.y = lockedYPosition;
+        position.y = groundLevel;
         transform.position = position;
         
         // Enable input actions
@@ -97,6 +119,8 @@ public class TopDownPlayerController : MonoBehaviour
             else
             {
                 moveAction.Enable();
+                // Debug: Test input reading
+                Debug.Log($"TopDownPlayerController: Move action found and enabled. Action type: {moveAction.type}, Expected control type: {moveAction.expectedControlType}");
             }
             
             if (sprintAction == null)
@@ -180,17 +204,17 @@ public class TopDownPlayerController : MonoBehaviour
     
     private void Update()
     {
-        // Ensure CharacterController is still enabled (it might get disabled by other scripts)
-        if (characterController != null && !characterController.enabled)
-        {
-            characterController.enabled = true;
-        }
-        
         DetectGround();
+        CheckGrounded();
         HandleMovement();
         HandleAttack();
         HandleSkills();
-        LockYPosition();
+    }
+    
+    private void FixedUpdate()
+    {
+        // Apply movement forces in FixedUpdate for physics
+        ApplyMovementForces();
     }
     
     private void HandleMovement()
@@ -201,15 +225,15 @@ public class TopDownPlayerController : MonoBehaviour
             return; // Can't move without input
         }
         
-        // Check if CharacterController is enabled and GameObject is active
-        if (characterController == null || !characterController.enabled || !gameObject.activeInHierarchy)
+        // Check if Rigidbody exists and GameObject is active
+        if (rb == null || !gameObject.activeInHierarchy)
         {
-            return; // Can't move if controller is disabled or GameObject is inactive
+            return; // Can't move if rigidbody is missing or GameObject is inactive
         }
         
         // Get input from Input System
         Vector2 input = moveAction.ReadValue<Vector2>();
-        
+
         // Check if sprinting
         bool isSprinting = sprintAction != null && sprintAction.IsPressed();
         
@@ -225,12 +249,10 @@ public class TopDownPlayerController : MonoBehaviour
             }
             
             // Check if player is on a hole and should fall through
-            if (currentGroundType.isHole && !isFalling)
+            if (currentGroundType.isHole && isGrounded && !isFalling)
             {
-                // Start falling through hole
+                // Start falling through hole - disable ground collision temporarily
                 isFalling = true;
-                fallSpeed = 0f;
-                fallSpeed = currentGroundType.fallSpeedMultiplier;
             }
         }
         else
@@ -243,61 +265,46 @@ public class TopDownPlayerController : MonoBehaviour
             }
         }
         
-        // Handle falling through holes
-        if (isFalling)
-        {
-            // Apply gravity/falling
-            fallSpeed += Physics.gravity.magnitude * Time.deltaTime;
-            characterController.Move(Vector3.down * fallSpeed * Time.deltaTime);
-            
-            // Check if we've fallen below a certain threshold (could respawn or trigger death)
-            if (transform.position.y < groundLevel - 50f)
-            {
-                // Player has fallen too far - could respawn or trigger death
-                // For now, stop falling and reset position
-                isFalling = false;
-                Vector3 pos = transform.position;
-                pos.y = lockedYPosition;
-                transform.position = pos;
-            }
-            
-            // Don't allow normal movement while falling
-            return;
-        }
-        
+        // Calculate movement speed
         currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier;
         
         // Convert 2D input to 3D movement on X-Z plane
-        moveDirection = new Vector3(input.x, 0f, input.y);
+        // Reset moveDirection first to ensure clean state
+        moveDirection = Vector3.zero;
         
-        // Normalize to prevent faster diagonal movement
-        if (moveDirection.magnitude > 1f)
+        // Only set direction if there's actual input
+        if (input.magnitude > 0.1f)
         {
+            // Convert 2D input (X, Y) to 3D movement (X, 0, Z)
+            // input.x = horizontal (left/right)
+            // input.y = vertical (forward/back)
+            moveDirection = new Vector3(input.x, 0f, input.y);
+            
+            // Normalize to prevent faster diagonal movement
             moveDirection.Normalize();
         }
         
-        // Apply movement
+        // Check if moving
         isCurrentlyMoving = moveDirection.magnitude > 0.1f;
         
-        if (isCurrentlyMoving)
+        // Debug: Log movement direction
+        if (debugGroundDetection)
         {
-            // Double-check CharacterController is still enabled before moving
-            if (characterController != null && characterController.enabled)
+            if (isCurrentlyMoving)
             {
-                // Move the character
-                characterController.Move(moveDirection * currentSpeed * Time.deltaTime);
-                
-                // Rotate towards movement direction
-                if (rotateTowardsMovement)
-                {
-                    Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-                    transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-                }
+                Debug.Log($"Move Direction: {moveDirection}, Input: {input}, Current Speed: {currentSpeed}");
             }
-            else
+            else if (input.magnitude > 0.01f)
             {
-                Debug.LogWarning($"TopDownPlayerController: CharacterController is disabled or null, cannot move. GameObject active: {gameObject.activeInHierarchy}, Controller enabled: {(characterController != null ? characterController.enabled.ToString() : "null")}");
+                Debug.LogWarning($"Input detected ({input}) but moveDirection is zero! Magnitude: {input.magnitude}");
             }
+        }
+        
+        // Rotate towards movement direction
+        if (isCurrentlyMoving && rotateTowardsMovement)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
         
         // Update animations (Unity 6 standard: Speed parameter for smooth blending)
@@ -307,6 +314,89 @@ public class TopDownPlayerController : MonoBehaviour
             // This allows smooth blending between Idle and Walk states
             float normalizedSpeed = isCurrentlyMoving ? 1.0f : 0.0f;
             characterAnimator.UpdateAnimations(isCurrentlyMoving, normalizedSpeed, isSprinting);
+        }
+    }
+    
+    /// <summary>
+    /// Applies movement forces to the Rigidbody (called in FixedUpdate)
+    /// Simple force-based movement: apply force in movement direction when input, stop force when no input
+    /// </summary>
+    private void ApplyMovementForces()
+    {
+        if (rb == null)
+        {
+            return;
+        }
+        
+        // Get current horizontal velocity (X-Z plane only, preserve Y for gravity)
+        Vector3 currentVelocity = rb.linearVelocity;
+        Vector3 horizontalVelocity = new Vector3(currentVelocity.x, 0f, currentVelocity.z);
+        
+        // Debug: Check if Y velocity is being affected
+        if (debugGroundDetection && isCurrentlyMoving && Mathf.Abs(currentVelocity.y) > 0.1f)
+        {
+            Debug.LogWarning($"Y velocity detected during movement: {currentVelocity.y}. This might be from terrain collision or other forces.");
+        }
+        
+        if (isCurrentlyMoving && moveDirection.magnitude > 0.01f)
+        {
+            // Apply force in the movement direction, scaled by current speed
+            // This ensures the force respects ground type multipliers and sprint
+            Vector3 force = moveDirection * moveForce * (currentSpeed / moveSpeed);
+            
+            // Debug: Log force being applied
+            if (debugGroundDetection)
+            {
+                Debug.Log($"Applying Force: {force}, MoveDirection: {moveDirection}, MoveForce: {moveForce}, CurrentSpeed: {currentSpeed}, SpeedRatio: {currentSpeed / moveSpeed}");
+            }
+            
+            rb.AddForce(force, ForceMode.Force);
+        }
+        else
+        {
+            // No input - stop horizontal movement
+            // Use drag to slow down naturally, but also directly zero small velocities
+            if (horizontalVelocity.magnitude > 0.1f)
+            {
+                // Apply stopping force to bring velocity to zero
+                Vector3 stopDirection = -horizontalVelocity.normalized;
+                Vector3 stoppingForce = stopDirection * stopForce;
+                rb.AddForce(stoppingForce, ForceMode.Force);
+            }
+            else if (horizontalVelocity.magnitude > 0.01f)
+            {
+                // For very small velocities, directly zero them to prevent jitter
+                Vector3 vel = rb.linearVelocity;
+                vel.x = 0f;
+                vel.z = 0f;
+                rb.linearVelocity = vel;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Checks if the player is grounded using raycast
+    /// </summary>
+    private void CheckGrounded()
+    {
+        // Raycast downward to check if on ground
+        isGrounded = Physics.Raycast(transform.position, Vector3.down, groundCheckDistance + 0.1f, groundLayerMask);
+        
+        // Reset falling state if back on ground
+        if (isGrounded && isFalling)
+        {
+            isFalling = false;
+        }
+        
+        // Check if fallen too far (respawn logic)
+        if (transform.position.y < groundLevel - 10f)
+        {
+            // Player has fallen too far - reset position
+            Vector3 pos = transform.position;
+            pos.y = groundLevel;
+            transform.position = pos;
+            rb.linearVelocity = Vector3.zero;
+            isFalling = false;
         }
     }
     
@@ -351,29 +441,6 @@ public class TopDownPlayerController : MonoBehaviour
         }
     }
     
-    private void LockYPosition()
-    {
-        // Constantly lock the Y position to prevent any vertical movement
-        // Only do this if the GameObject and CharacterController are active
-        // Don't lock Y if player is falling through a hole
-        if (characterController != null && characterController.enabled && gameObject.activeInHierarchy && !isFalling)
-        {
-            Vector3 position = transform.position;
-            position.y = lockedYPosition;
-            transform.position = position;
-        }
-        
-        // Reset falling state if we're back on solid ground
-        if (isFalling && currentGroundType != null && !currentGroundType.isHole)
-        {
-            // Check if we're back at ground level
-            if (Mathf.Abs(transform.position.y - lockedYPosition) < 0.5f)
-            {
-                isFalling = false;
-                fallSpeed = 0f;
-            }
-        }
-    }
     
     /// <summary>
     /// Detects the ground type at the player's position

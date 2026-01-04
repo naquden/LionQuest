@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GroundType
   groundName: Dirt
   biomeColor: {r: 0.5377358, g: 0.23150109, b: 0.10399607, a: 1}
-  movementSpeedMultiplier: 0.79
+  movementSpeedMultiplier: 0.52
   isWalkable: 1
   isHole: 0
   fallSpeedMultiplier: 1
-  terrainTexture: {fileID: 0}
+  terrainTexture: {fileID: 2800000, guid: d97c80f80eda941ff90667c670b78b32, type: 3}
   normalMap: {fileID: 0}
   textureTiling: {x: 15, y: 15}

@@ -18,6 +18,6 @@ MonoBehaviour:
   isWalkable: 1
   isHole: 0
   fallSpeedMultiplier: 1
-  terrainTexture: {fileID: 0}
-  normalMap: {fileID: 0}
+  terrainTexture: {fileID: 2800000, guid: dbc94ea4c60b6485099b2ed7981f8c13, type: 3}
+  normalMap: {fileID: 2800000, guid: e0643807de33947dbb7e0154ad1f770f, type: 3}
   textureTiling: {x: 15, y: 15}

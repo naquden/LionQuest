@@ -1,0 +1,13 @@
+**Component and GameObject References:**
+- Do NOT use fallbacks (FindObjectOfType, FindGameObjectWithTag, Camera.main, etc.) when unable to find scene-specific GameObjects or components
+- Print errors in console (Debug.LogError) when crucial components are missing, since this is critical for the game to work properly
+- As a developer, you need to know if anything is missing from the scene so you can fix it - that is better than falling back to something with unexpected behavior
+- Required components must be assigned in the inspector - if they're missing, error immediately rather than silently failing or using incorrect fallbacks
+
+**Documentation:**
+- Do NOT create markdown (.md) files unless explicitly requested by the user
+
+**Scene Files:**
+- Do NOT modify or change Scene files (.unity) unless explicitly approved by the user
+- Scene modifications must be explicitly requested - never make scene changes proactively
+

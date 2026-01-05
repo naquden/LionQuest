@@ -40,6 +40,16 @@ public class TopDownPlayerController : MonoBehaviour
     [Header("References")]
     [SerializeField] private InputActionAsset inputActions;
     
+    [Tooltip("Camera to check viewport bounds against. Must be assigned in inspector. Should be the camera from TopDownCameraController.")]
+    [SerializeField] private Camera viewportCamera;
+    
+    [Header("Viewport Boundaries")]
+    [Tooltip("Margin from viewport edges (0-1). 0.1 means player can move within 10% of screen edge.")]
+    [SerializeField] private float viewportMargin = 0.1f;
+    
+    [Tooltip("Enable viewport boundary checking to prevent player from moving outside camera view.")]
+    [SerializeField] private bool enforceViewportBounds = true;
+    
     [Header("Animation (Optional)")]
     [Tooltip("CharacterAnimator component for handling animations. Leave empty if not using animations.")]
     [SerializeField] private CharacterAnimator characterAnimator;
@@ -173,7 +183,7 @@ public class TopDownPlayerController : MonoBehaviour
             Debug.LogError($"TopDownPlayerController on '{gameObject.name}': InputActions asset is not assigned! Please assign it in the inspector.");
         }
         
-        // Try to find CharacterAnimator if not assigned
+        // Try to find CharacterAnimator if not assigned (optional component)
         if (characterAnimator == null)
         {
             characterAnimator = GetComponent<CharacterAnimator>();
@@ -182,7 +192,17 @@ public class TopDownPlayerController : MonoBehaviour
         // Try to find MapGenerator if not assigned
         if (mapGenerator == null)
         {
-            mapGenerator = FindObjectOfType<MapGenerator>();
+            mapGenerator = FindFirstObjectByType<MapGenerator>();
+            if (mapGenerator == null)
+            {
+                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': MapGenerator is not assigned and could not be found in the scene! Ground type detection will not work. Please ensure a MapGenerator component exists in the scene or assign it in the inspector.");
+            }
+        }
+        
+        // Validate viewportCamera - required for viewport bounds checking
+        if (viewportCamera == null)
+        {
+            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': ViewportCamera is not assigned! Viewport bounds checking will not work. Please assign the camera from TopDownCameraController in the inspector.");
         }
     }
     
@@ -272,20 +292,46 @@ public class TopDownPlayerController : MonoBehaviour
         // Reset moveDirection first to ensure clean state
         moveDirection = Vector3.zero;
         
+        // Store original input for animation purposes
+        bool hasInput = input.magnitude > 0.1f;
+        Vector3 desiredDirection = Vector3.zero;
+        
         // Only set direction if there's actual input
-        if (input.magnitude > 0.1f)
+        if (hasInput)
         {
             // Convert 2D input (X, Y) to 3D movement (X, 0, Z)
             // input.x = horizontal (left/right)
             // input.y = vertical (forward/back)
-            moveDirection = new Vector3(input.x, 0f, input.y);
+            desiredDirection = new Vector3(input.x, 0f, input.y);
             
             // Normalize to prevent faster diagonal movement
-            moveDirection.Normalize();
+            desiredDirection.Normalize();
+            
+            // Check viewport bounds if enabled
+            if (enforceViewportBounds && viewportCamera != null)
+            {
+                // Calculate next position based on movement direction
+                Vector3 nextPosition = transform.position + desiredDirection * (currentSpeed * Time.deltaTime);
+                
+                // Check if next position would be outside viewport
+                if (!IsPositionWithinViewport(nextPosition))
+                {
+                    // Block movement in the direction that would go outside viewport
+                    // Try to allow movement in other directions if possible
+                    desiredDirection = GetClampedMovementDirection(desiredDirection, transform.position, currentSpeed * Time.deltaTime);
+                }
+            }
+            
+            moveDirection = desiredDirection;
+        }
+        else
+        {
+            moveDirection = Vector3.zero;
         }
         
-        // Check if moving
-        isCurrentlyMoving = moveDirection.magnitude > 0.1f;
+        // Check if moving (use original input for animation, not clamped direction)
+        // This allows walk animation to play even when movement is blocked
+        isCurrentlyMoving = hasInput;
         
         // Debug: Log movement direction
         if (debugGroundDetection)
@@ -447,19 +493,74 @@ public class TopDownPlayerController : MonoBehaviour
     /// </summary>
     private void DetectGround()
     {
-        // Try to find MapGenerator if not assigned
-        if (mapGenerator == null)
-        {
-            mapGenerator = FindObjectOfType<MapGenerator>();
-            if (mapGenerator == null)
-            {
-                currentGroundType = null;
-                return;
-            }
-        }
-        
         // Get ground type from MapGenerator
         currentGroundType = mapGenerator.GetGroundTypeAtPosition(transform.position);
+    }
+    
+    /// <summary>
+    /// Check if a world position is within the camera viewport bounds
+    /// </summary>
+    private bool IsPositionWithinViewport(Vector3 worldPosition)
+    {
+        if (viewportCamera == null)
+        {
+            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Cannot check viewport bounds - viewportCamera is null! Please assign a camera in the inspector.");
+            return true; // Allow movement if camera is missing to prevent blocking
+        }
+        
+        // Convert world position to viewport coordinates (0-1 range)
+        Vector3 viewportPos = viewportCamera.WorldToViewportPoint(worldPosition);
+        
+        // Check if position is within viewport bounds (with margin)
+        // X and Y should be between margin and (1 - margin)
+        // Z should be positive (in front of camera)
+        bool withinX = viewportPos.x >= viewportMargin && viewportPos.x <= (1f - viewportMargin);
+        bool withinY = viewportPos.y >= viewportMargin && viewportPos.y <= (1f - viewportMargin);
+        bool inFront = viewportPos.z > 0f;
+        
+        return withinX && withinY && inFront;
+    }
+    
+    /// <summary>
+    /// Get a movement direction that is clamped to stay within viewport bounds
+    /// Tries to allow partial movement if only one axis would go outside
+    /// </summary>
+    private Vector3 GetClampedMovementDirection(Vector3 desiredDirection, Vector3 currentPosition, float moveDistance)
+    {
+        if (viewportCamera == null)
+        {
+            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Cannot clamp movement direction - viewportCamera is null! Please assign a camera in the inspector.");
+            return desiredDirection;
+        }
+        
+        Vector3 clampedDirection = Vector3.zero;
+        
+        // Test X movement separately
+        Vector3 testX = currentPosition + new Vector3(desiredDirection.x * moveDistance, 0f, 0f);
+        bool canMoveX = IsPositionWithinViewport(testX);
+        
+        // Test Z movement separately
+        Vector3 testZ = currentPosition + new Vector3(0f, 0f, desiredDirection.z * moveDistance);
+        bool canMoveZ = IsPositionWithinViewport(testZ);
+        
+        // Allow movement in directions that stay within bounds
+        if (canMoveX)
+        {
+            clampedDirection.x = desiredDirection.x;
+        }
+        
+        if (canMoveZ)
+        {
+            clampedDirection.z = desiredDirection.z;
+        }
+        
+        // Normalize to maintain consistent speed
+        if (clampedDirection.magnitude > 0.1f)
+        {
+            clampedDirection.Normalize();
+        }
+        
+        return clampedDirection;
     }
     
     private void OnDrawGizmosSelected()
@@ -476,6 +577,24 @@ public class TopDownPlayerController : MonoBehaviour
         {
             Gizmos.color = currentGroundType.biomeColor;
             Gizmos.DrawWireSphere(transform.position, 0.5f);
+        }
+        
+        // Draw viewport bounds indicator
+        if (enforceViewportBounds && viewportCamera != null && Application.isPlaying)
+        {
+            // Draw a line from player to viewport edge
+            Vector3 viewportPos = viewportCamera.WorldToViewportPoint(transform.position);
+            Gizmos.color = Color.yellow;
+            
+            // Draw lines to viewport boundaries
+            if (viewportPos.x <= viewportMargin || viewportPos.x >= (1f - viewportMargin))
+            {
+                Gizmos.color = Color.red;
+            }
+            else if (viewportPos.y <= viewportMargin || viewportPos.y >= (1f - viewportMargin))
+            {
+                Gizmos.color = Color.red;
+            }
         }
     }
 }

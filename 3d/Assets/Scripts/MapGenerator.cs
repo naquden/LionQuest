@@ -482,13 +482,21 @@ public class MapGenerator : MonoBehaviour
     }
     
     /// <summary>
+    /// Checks if the map has been generated
+    /// </summary>
+    public bool IsMapGenerated()
+    {
+        return groundTypeMap != null && terrain != null && terrainData != null;
+    }
+    
+    /// <summary>
     /// Gets the ground type at a world position
     /// </summary>
     public GroundType GetGroundTypeAtPosition(Vector3 worldPosition)
     {
         if (groundTypeMap == null)
         {
-            Debug.LogWarning("MapGenerator: groundTypeMap is null. Make sure GenerateMap() has been called.");
+            // Don't spam warnings - this will be handled by the caller
             return null;
         }
         
@@ -498,19 +506,22 @@ public class MapGenerator : MonoBehaviour
             return null;
         }
         
-        // Convert world position to terrain local position
-        Vector3 localPos = worldPosition - terrain.transform.position;
+        // Get terrain bounds
+        Vector3 terrainPos = terrain.transform.position;
+        Vector3 terrainSize = terrainData.size;
         
-        // Convert to map coordinates (heightmap coordinates)
-        // Note: terrainResolution is the heightmap resolution, which matches groundTypeMap dimensions
-        float normalizedX = localPos.x / mapSize.x;
-        float normalizedZ = localPos.z / mapSize.y;
+        // Convert world position to terrain local position
+        Vector3 localPos = worldPosition - terrainPos;
+        
+        // Convert to normalized coordinates [0, 1] based on terrain size
+        float normalizedX = localPos.x / terrainSize.x;
+        float normalizedZ = localPos.z / terrainSize.z;
         
         // Clamp normalized coordinates to [0, 1]
         normalizedX = Mathf.Clamp01(normalizedX);
         normalizedZ = Mathf.Clamp01(normalizedZ);
         
-        // Convert to array indices
+        // Convert to array indices (groundTypeMap uses terrainResolution which matches heightmap resolution)
         int x = Mathf.FloorToInt(normalizedX * terrainResolution);
         int y = Mathf.FloorToInt(normalizedZ * terrainResolution);
         

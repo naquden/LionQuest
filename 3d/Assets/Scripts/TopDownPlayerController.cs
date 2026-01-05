@@ -67,6 +67,7 @@ public class TopDownPlayerController : MonoBehaviour
     private bool isFalling = false;
     private bool isGrounded = false;
     private GroundType currentGroundType;
+    private bool hasWarnedAboutMissingGroundType = false;
     
     /// <summary>
     /// Returns whether the character is currently moving
@@ -279,9 +280,10 @@ public class TopDownPlayerController : MonoBehaviour
         {
             // If no ground type detected, use default speed (no multiplier)
             groundSpeedMultiplier = 1f;
-            if (debugGroundDetection)
+            if (!hasWarnedAboutMissingGroundType)
             {
-                Debug.LogWarning("No ground type detected! Make sure MapGenerator has generated the map and is in the scene.");
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': No ground type detected! Make sure MapGenerator has generated the map and is in the scene. This warning will only be shown once.");
+                hasWarnedAboutMissingGroundType = true;
             }
         }
         
@@ -493,8 +495,30 @@ public class TopDownPlayerController : MonoBehaviour
     /// </summary>
     private void DetectGround()
     {
+        // Validate MapGenerator is assigned
+        if (mapGenerator == null)
+        {
+            currentGroundType = null;
+            return;
+        }
+        
+        // Check if map has been generated - if not, try to generate it
+        if (!mapGenerator.IsMapGenerated())
+        {
+            if (!hasWarnedAboutMissingGroundType)
+            {
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': MapGenerator map has not been generated yet. Attempting to generate map...");
+                mapGenerator.GenerateMap();
+                hasWarnedAboutMissingGroundType = true;
+            }
+            currentGroundType = null;
+            return;
+        }
+        
         // Get ground type from MapGenerator
-        currentGroundType = mapGenerator.GetGroundTypeAtPosition(transform.position);
+        // Use the player's position projected onto the ground (X and Z, Y at ground level)
+        Vector3 groundPosition = new Vector3(transform.position.x, 0f, transform.position.z);
+        currentGroundType = mapGenerator.GetGroundTypeAtPosition(groundPosition);
     }
     
     /// <summary>

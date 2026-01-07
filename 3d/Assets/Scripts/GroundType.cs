@@ -41,3 +41,4 @@ public class GroundType : ScriptableObject
     public Vector2 textureTiling = new Vector2(15, 15);
 }
 
+

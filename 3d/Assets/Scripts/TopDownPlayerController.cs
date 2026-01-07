@@ -54,6 +54,22 @@ public class TopDownPlayerController : MonoBehaviour
     [Tooltip("CharacterAnimator component for handling animations. Leave empty if not using animations.")]
     [SerializeField] private CharacterAnimator characterAnimator;
     
+    [Header("Combat")]
+    [Tooltip("CombatController component. If not assigned, will try to find it on this GameObject.")]
+    [SerializeField] private CombatController combatController;
+    
+    [Tooltip("Attack data for basic attack")]
+    [SerializeField] private AttackData basicAttackData;
+    
+    [Tooltip("Attack data for Skill 1")]
+    [SerializeField] private AttackData skill1AttackData;
+    
+    [Tooltip("Attack data for Skill 2")]
+    [SerializeField] private AttackData skill2AttackData;
+    
+    [Tooltip("Attack data for Skill 3")]
+    [SerializeField] private AttackData skill3AttackData;
+    
     private Rigidbody rb;
     private InputAction moveAction;
     private InputAction sprintAction;
@@ -188,6 +204,43 @@ public class TopDownPlayerController : MonoBehaviour
         if (characterAnimator == null)
         {
             characterAnimator = GetComponent<CharacterAnimator>();
+        }
+        
+        // Try to find or create CombatController if not assigned
+        if (combatController == null)
+        {
+            combatController = GetComponent<CombatController>();
+            if (combatController == null)
+            {
+                // Auto-add CombatController
+                combatController = gameObject.AddComponent<CombatController>();
+                Debug.Log($"TopDownPlayerController on '{gameObject.name}': Auto-added CombatController component.");
+            }
+        }
+        
+        // Validate attack data - only warn about basic attack since that's essential
+        if (combatController != null)
+        {
+            if (basicAttackData == null)
+            {
+                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Basic attack data is not assigned! Please create an AttackData ScriptableObject and assign it. Basic attack will not work.");
+            }
+            
+            // Skills are optional, only warn
+            if (skill1AttackData == null && skill1Action != null)
+            {
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': Skill 1 attack data is not assigned. Skill 1 will not work.");
+            }
+            
+            if (skill2AttackData == null && skill2Action != null)
+            {
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': Skill 2 attack data is not assigned. Skill 2 will not work.");
+            }
+            
+            if (skill3AttackData == null && skill3Action != null)
+            {
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': Skill 3 attack data is not assigned. Skill 3 will not work.");
+            }
         }
         
         // Try to find MapGenerator if not assigned
@@ -453,10 +506,30 @@ public class TopDownPlayerController : MonoBehaviour
         // Check if attack button was pressed this frame
         if (attackAction != null && attackAction.WasPressedThisFrame())
         {
+            Debug.Log($"[Player] Attack button pressed!");
+            
             // Trigger attack animation
             if (characterAnimator != null)
             {
                 characterAnimator.TriggerAttack(0); // Default to light attack (type 0)
+            }
+            
+            // Perform combat attack
+            if (combatController != null && basicAttackData != null)
+            {
+                Debug.Log($"[Player] Performing attack with {basicAttackData.attackName}, range: {basicAttackData.attackRange}");
+                combatController.PerformAttack(basicAttackData);
+            }
+            else
+            {
+                if (combatController == null)
+                {
+                    Debug.LogError($"[Player] CombatController is null! Cannot perform attack.");
+                }
+                if (basicAttackData == null)
+                {
+                    Debug.LogError($"[Player] BasicAttackData is null! Cannot perform attack.");
+                }
             }
         }
     }
@@ -470,6 +543,12 @@ public class TopDownPlayerController : MonoBehaviour
             {
                 characterAnimator.TriggerSkill1();
             }
+            
+            // Perform skill 1 attack
+            if (combatController != null && skill1AttackData != null)
+            {
+                combatController.PerformAttack(skill1AttackData);
+            }
         }
         
         if (skill2Action != null && skill2Action.WasPressedThisFrame())
@@ -478,6 +557,12 @@ public class TopDownPlayerController : MonoBehaviour
             {
                 characterAnimator.TriggerSkill2();
             }
+            
+            // Perform skill 2 attack
+            if (combatController != null && skill2AttackData != null)
+            {
+                combatController.PerformAttack(skill2AttackData);
+            }
         }
         
         if (skill3Action != null && skill3Action.WasPressedThisFrame())
@@ -485,6 +570,12 @@ public class TopDownPlayerController : MonoBehaviour
             if (characterAnimator != null)
             {
                 characterAnimator.TriggerSkill3();
+            }
+            
+            // Perform skill 3 attack
+            if (combatController != null && skill3AttackData != null)
+            {
+                combatController.PerformAttack(skill3AttackData);
             }
         }
     }

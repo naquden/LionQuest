@@ -69,9 +69,6 @@ PrefabInstance:
       addedObject: {fileID: 4524388571760832432}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3104603588410779646}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 4257904257366354681}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       insertIndex: -1
@@ -107,34 +104,6 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!114 &3104603588410779646
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 226482859916651790}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e113220ade4fd47019168c71fc79a7ae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TopDownPlayerController
-  moveSpeed: 5
-  sprintMultiplier: 1.5
-  moveForce: 50
-  stopForce: 200
-  drag: 5
-  mapGenerator: {fileID: 0}
-  debugGroundDetection: 1
-  rotationSpeed: 10
-  rotateTowardsMovement: 1
-  groundLevel: 0
-  groundCheckDistance: 0.1
-  groundLayerMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
-  characterAnimator: {fileID: 4257904257366354681}
 --- !u!114 &4257904257366354681
 MonoBehaviour:
   m_ObjectHideFlags: 0

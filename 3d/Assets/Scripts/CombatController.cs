@@ -152,6 +152,22 @@ public class CombatController : MonoBehaviour
         knockbackMultiplier = multiplier;
     }
     
+    /// <summary>
+    /// Set the attack point transform (where attacks originate from)
+    /// </summary>
+    public void SetAttackPoint(Transform point)
+    {
+        attackPoint = point;
+    }
+    
+    /// <summary>
+    /// Get the current attack point transform
+    /// </summary>
+    public Transform GetAttackPoint()
+    {
+        return attackPoint;
+    }
+    
     private void OnDrawGizmosSelected()
     {
         Transform point = attackPoint != null ? attackPoint : transform;

@@ -253,10 +253,18 @@ public class TopDownPlayerController : MonoBehaviour
             }
         }
         
-        // Validate viewportCamera - required for viewport bounds checking
+        // Find viewportCamera if not assigned - look for MainCamera tag
         if (viewportCamera == null)
         {
-            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': ViewportCamera is not assigned! Viewport bounds checking will not work. Please assign the camera from TopDownCameraController in the inspector.");
+            viewportCamera = Camera.main;
+            if (viewportCamera != null)
+            {
+                Debug.Log($"TopDownPlayerController on '{gameObject.name}': Found viewport camera '{viewportCamera.name}' via Camera.main");
+            }
+            else
+            {
+                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': ViewportCamera is not assigned and no camera with 'MainCamera' tag found! Viewport bounds checking will not work.");
+            }
         }
     }
     

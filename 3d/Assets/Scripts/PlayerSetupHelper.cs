@@ -10,10 +10,6 @@ public class PlayerSetupHelper : MonoBehaviour
     [SerializeField] private float colliderRadius = 0.5f;
     [SerializeField] private float colliderHeight = 2f;
     
-    [Header("Attack Point Settings")]
-    [SerializeField] private float attackPointDistance = 1f;
-    [SerializeField] private float attackPointHeight = 1f;
-    
     /// <summary>
     /// Sets up the player with all required components.
     /// Call from context menu in editor.
@@ -57,22 +53,6 @@ public class PlayerSetupHelper : MonoBehaviour
             Debug.Log($"[PlayerSetup] Added CapsuleCollider");
         }
         
-        // Create or find AttackPoint child GameObject
-        Transform attackPoint = transform.Find("AttackPoint");
-        if (attackPoint == null)
-        {
-            GameObject attackPointObj = new GameObject("AttackPoint");
-            attackPointObj.transform.SetParent(transform);
-            attackPointObj.transform.localPosition = new Vector3(0f, attackPointHeight, attackPointDistance);
-            attackPointObj.transform.localRotation = Quaternion.identity;
-            attackPoint = attackPointObj.transform;
-            Debug.Log($"[PlayerSetup] Created AttackPoint at local position {attackPointObj.transform.localPosition}");
-        }
-        else
-        {
-            Debug.Log($"[PlayerSetup] AttackPoint already exists");
-        }
-        
         // Add TopDownPlayerController if missing
         TopDownPlayerController playerController = GetComponent<TopDownPlayerController>();
         if (playerController == null)
@@ -81,17 +61,13 @@ public class PlayerSetupHelper : MonoBehaviour
             Debug.Log($"[PlayerSetup] Added TopDownPlayerController");
         }
         
-        // Add CombatController if missing
+        // Add CombatController if missing (it auto-creates AttackPoint)
         CombatController combatController = GetComponent<CombatController>();
         if (combatController == null)
         {
             combatController = gameObject.AddComponent<CombatController>();
             Debug.Log($"[PlayerSetup] Added CombatController");
         }
-        
-        // Wire up AttackPoint reference in CombatController
-        combatController.SetAttackPoint(attackPoint);
-        Debug.Log($"[PlayerSetup] Assigned AttackPoint to CombatController");
         
         // Add CharacterAnimator if has Animator
         Animator animator = GetComponent<Animator>();
@@ -121,7 +97,10 @@ public class PlayerSetupHelper : MonoBehaviour
     
     private void OnDrawGizmosSelected()
     {
-        // Visualize attack point position
+        // Visualize attack point position (default values from CombatController)
+        float attackPointDistance = 0.8f;
+        float attackPointHeight = 1f;
+        
         Vector3 attackPointPos = transform.position + transform.forward * attackPointDistance + Vector3.up * attackPointHeight;
         
         Gizmos.color = Color.red;

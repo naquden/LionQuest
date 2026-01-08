@@ -72,6 +72,14 @@ public class EnemySetupHelper : MonoBehaviour
             }
         }
         
+        // Add CombatController if missing (it auto-creates AttackPoint)
+        CombatController combat = GetComponent<CombatController>();
+        if (combat == null)
+        {
+            combat = gameObject.AddComponent<CombatController>();
+            Debug.Log($"[EnemySetup] Added CombatController to {gameObject.name}");
+        }
+        
         Debug.Log($"[EnemySetup] Setup complete for {gameObject.name}. You can now remove EnemySetupHelper.");
     }
     
@@ -84,3 +92,4 @@ public class EnemySetupHelper : MonoBehaviour
         }
     }
 }
+

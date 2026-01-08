@@ -19,18 +19,24 @@ public class Enemy : MonoBehaviour
     [SerializeField] private float detectionRange = 15f;
     [SerializeField] private string playerTag = "Player";
     
+    [Header("Attack")]
+    [SerializeField] private AttackData basicAttack;
+    [SerializeField] private float attackCooldown = 2f;
+    
     [Header("Debug")]
     [SerializeField] private bool debugEnemy = false;
     
     // Components
     private Rigidbody rb;
     private EnemyAnimator enemyAnimator;
+    private CombatController combatController;
     
     // State
     private Transform targetPlayer;
     private bool isAlive = true;
     private bool isKnockedBack = false;
     private float knockbackEndTime;
+    private float lastAttackTime;
     
     // Events
     public System.Action<float, float> OnHealthChanged; // current, max
@@ -46,10 +52,21 @@ public class Enemy : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         enemyAnimator = GetComponent<EnemyAnimator>();
+        combatController = GetComponent<CombatController>();
         currentHealth = maxHealth;
         
         // Configure Rigidbody for smooth physics movement
         ConfigureRigidbody();
+        
+        if (combatController == null)
+        {
+            Debug.LogError($"[Enemy] {gameObject.name}: Missing CombatController! Add it via EnemySetupHelper.");
+        }
+        
+        if (basicAttack == null)
+        {
+            Debug.LogWarning($"[Enemy] {gameObject.name}: No basicAttack assigned. Enemy won't be able to attack.");
+        }
     }
     
     private void Start()
@@ -152,7 +169,7 @@ public class Enemy : MonoBehaviour
         
         if (distanceToPlayer <= stoppingDistance)
         {
-            // Close enough - stop and maybe attack
+            // Close enough - stop and attack
             enemyAnimator?.SetMoving(false);
             
             // Face the player
@@ -160,6 +177,13 @@ public class Enemy : MonoBehaviour
             {
                 transform.rotation = Quaternion.LookRotation(directionToPlayer.normalized);
             }
+            
+            // Try to attack
+            if (debugEnemy)
+            {
+                Debug.Log($"[Enemy] {gameObject.name} in attack range (dist: {distanceToPlayer:F2}, stopping: {stoppingDistance})");
+            }
+            TryAttack();
             return;
         }
         
@@ -183,6 +207,41 @@ public class Enemy : MonoBehaviour
         {
             Debug.Log($"[Enemy] Moving toward {targetPlayer.name}, distance: {distanceToPlayer:F1}");
         }
+    }
+    
+    /// <summary>
+    /// Attempt to perform a basic attack if cooldown allows
+    /// </summary>
+    private void TryAttack()
+    {
+        if (basicAttack == null)
+        {
+            if (debugEnemy) Debug.LogWarning($"[Enemy] {gameObject.name}: Cannot attack - basicAttack is not assigned!");
+            return;
+        }
+        
+        if (combatController == null)
+        {
+            if (debugEnemy) Debug.LogWarning($"[Enemy] {gameObject.name}: Cannot attack - combatController is missing!");
+            return;
+        }
+        
+        // Check cooldown
+        float timeSinceLastAttack = Time.time - lastAttackTime;
+        if (timeSinceLastAttack < attackCooldown)
+        {
+            return; // Still on cooldown
+        }
+        
+        lastAttackTime = Time.time;
+        
+        Debug.Log($"[Enemy] {gameObject.name} attacking with '{basicAttack.attackName}'!");
+        
+        // Perform attack using CombatController (spawns effect at AttackPoint)
+        combatController.PerformAttack(basicAttack);
+        
+        // Trigger attack animation
+        enemyAnimator?.TriggerAttack();
     }
     
     /// <summary>

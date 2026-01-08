@@ -18,8 +18,15 @@ public class CombatController : MonoBehaviour
     [SerializeField] private string targetTag = "Enemy";
     
     [Header("References")]
-    [Tooltip("Point where attacks originate (defaults to transform if not set)")]
+    [Tooltip("Point where attacks originate (auto-created if not set)")]
     [SerializeField] private Transform attackPoint;
+    
+    [Header("Attack Point Settings")]
+    [Tooltip("Distance in front of character where AttackPoint is created")]
+    [SerializeField] private float attackPointDistance = 0.8f;
+    
+    [Tooltip("Height of the AttackPoint")]
+    [SerializeField] private float attackPointHeight = 1f;
     
     [Header("Debug")]
     [SerializeField] private bool debugCombat = false;
@@ -33,10 +40,26 @@ public class CombatController : MonoBehaviour
     
     private void Awake()
     {
-        // Default attack point to this transform
+        // Create AttackPoint if not assigned
         if (attackPoint == null)
         {
-            attackPoint = transform;
+            // First check if one already exists as child
+            attackPoint = transform.Find("AttackPoint");
+            
+            if (attackPoint == null)
+            {
+                // Create new AttackPoint
+                GameObject attackPointObj = new GameObject("AttackPoint");
+                attackPointObj.transform.SetParent(transform);
+                attackPointObj.transform.localPosition = new Vector3(0, attackPointHeight, attackPointDistance);
+                attackPointObj.transform.localRotation = Quaternion.identity;
+                attackPoint = attackPointObj.transform;
+                
+                if (debugCombat)
+                {
+                    Debug.Log($"[Combat] Created AttackPoint for {gameObject.name}");
+                }
+            }
         }
         
         // Auto-detect target tag based on this entity's tag

@@ -70,6 +70,19 @@ public class TopDownPlayerController : MonoBehaviour
     [Tooltip("Attack data for Skill 3")]
     [SerializeField] private AttackData skill3AttackData;
     
+    [Header("Health")]
+    [SerializeField] private float maxHealth = 100f;
+    private float currentHealth;
+    
+    // Events
+    public System.Action<float, float> OnHealthChanged; // current, max
+    public System.Action OnDeath;
+    
+    // Properties
+    public float CurrentHealth => currentHealth;
+    public float MaxHealth => maxHealth;
+    public bool IsAlive => currentHealth > 0f;
+    
     private Rigidbody rb;
     private InputAction moveAction;
     private InputAction sprintAction;
@@ -266,6 +279,9 @@ public class TopDownPlayerController : MonoBehaviour
                 Debug.LogError($"TopDownPlayerController on '{gameObject.name}': ViewportCamera is not assigned and no camera with 'MainCamera' tag found! Viewport bounds checking will not work.");
             }
         }
+        
+        // Initialize health
+        currentHealth = maxHealth;
     }
     
     private void OnEnable()
@@ -684,6 +700,78 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         return clampedDirection;
+    }
+    
+    /// <summary>
+    /// Take damage and apply knockback force.
+    /// Called by enemy's combat system when hitting the player.
+    /// </summary>
+    /// <param name="damage">Amount of damage to take</param>
+    /// <param name="knockbackDirection">Direction to knock back (horizontal only)</param>
+    /// <param name="knockbackForce">Force magnitude of knockback</param>
+    public void TakeDamage(float damage, Vector3 knockbackDirection, float knockbackForce)
+    {
+        if (!IsAlive) return;
+        
+        // Apply damage
+        currentHealth -= damage;
+        currentHealth = Mathf.Max(0f, currentHealth);
+        
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        
+        Debug.Log($"[Player] {gameObject.name} took {damage} damage. Health: {currentHealth}/{maxHealth}");
+        
+        // Apply knockback (horizontal only)
+        if (knockbackForce > 0f && rb != null)
+        {
+            Vector3 horizontalKnockback = new Vector3(knockbackDirection.x, 0f, knockbackDirection.z).normalized;
+            rb.AddForce(horizontalKnockback * knockbackForce, ForceMode.Impulse);
+        }
+        
+        // Trigger hit animation
+        characterAnimator?.TriggerHit();
+        
+        // Check for death
+        if (currentHealth <= 0f)
+        {
+            Die();
+        }
+    }
+    
+    /// <summary>
+    /// Take damage without knockback
+    /// </summary>
+    public void TakeDamage(float damage)
+    {
+        TakeDamage(damage, Vector3.zero, 0f);
+    }
+    
+    /// <summary>
+    /// Handle player death
+    /// </summary>
+    private void Die()
+    {
+        Debug.Log($"[Player] {gameObject.name} died!");
+        
+        OnDeath?.Invoke();
+        characterAnimator?.TriggerDeath();
+        
+        // Disable input
+        if (inputActions != null)
+        {
+            inputActions.Disable();
+        }
+    }
+    
+    /// <summary>
+    /// Heal the player
+    /// </summary>
+    public void Heal(float amount)
+    {
+        if (!IsAlive) return;
+        
+        currentHealth = Mathf.Min(currentHealth + amount, maxHealth);
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
     
     private void OnDrawGizmosSelected()

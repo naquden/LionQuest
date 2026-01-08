@@ -129,21 +129,33 @@ public class AttackEffect : MonoBehaviour
             
             if (debugHits)
             {
-                Debug.Log($"[AttackEffect] ✓ Hit {other.gameObject.name} for {damage} damage!");
+                Debug.Log($"[AttackEffect] ✓ Hit enemy {other.gameObject.name} for {damage} damage!");
             }
+            return;
         }
-        else
+        
+        // Try to hit Player script
+        TopDownPlayerController player = other.GetComponent<TopDownPlayerController>();
+        if (player != null)
         {
-            // Fallback: apply force to rigidbody
-            Rigidbody targetRb = other.GetComponent<Rigidbody>();
-            if (targetRb != null && !targetRb.isKinematic)
+            player.TakeDamage(damage, knockbackDir, totalKnockback);
+            
+            if (debugHits)
             {
-                targetRb.AddForce(knockbackDir * totalKnockback, ForceMode.Impulse);
-                
-                if (debugHits)
-                {
-                    Debug.Log($"[AttackEffect] Applied knockback to {other.gameObject.name} (no Enemy script)");
-                }
+                Debug.Log($"[AttackEffect] ✓ Hit player {other.gameObject.name} for {damage} damage!");
+            }
+            return;
+        }
+        
+        // Fallback: apply force to rigidbody
+        Rigidbody targetRb = other.GetComponent<Rigidbody>();
+        if (targetRb != null && !targetRb.isKinematic)
+        {
+            targetRb.AddForce(knockbackDir * totalKnockback, ForceMode.Impulse);
+            
+            if (debugHits)
+            {
+                Debug.Log($"[AttackEffect] Applied knockback to {other.gameObject.name} (no Enemy/Player script)");
             }
         }
         

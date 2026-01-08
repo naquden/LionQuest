@@ -268,6 +268,27 @@ public class CharacterAnimator : MonoBehaviour
     }
     
     /// <summary>
+    /// Triggers the hit/damage animation
+    /// </summary>
+    public void TriggerHit()
+    {
+        if (animator == null || !animator.enabled || isDead)
+        {
+            return;
+        }
+        
+        // Try to trigger "Hit" parameter if it exists
+        if (HasParameter("Hit", AnimatorControllerParameterType.Trigger))
+        {
+            animator.SetTrigger("Hit");
+            if (debugLog)
+            {
+                Debug.Log("CharacterAnimator: Triggered Hit");
+            }
+        }
+    }
+    
+    /// <summary>
     /// Triggers the death animation
     /// </summary>
     public void TriggerDeath()

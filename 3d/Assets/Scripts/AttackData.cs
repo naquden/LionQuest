@@ -11,6 +11,13 @@ public class AttackData : ScriptableObject
     [Tooltip("Name of the attack (for debugging/logging)")]
     public string attackName = "Attack";
     
+    [Header("Effect")]
+    [Tooltip("Prefab to spawn at AttackPoint (should have particle effect and AttackEffect script)")]
+    public GameObject effectPrefab;
+    
+    [Tooltip("Lifetime of the effect (auto-destroy after this time, 0 = use particle duration)")]
+    public float effectLifetime = 0f;
+    
     [Header("Damage")]
     [Tooltip("Base damage dealt by this attack")]
     public float damage = 10f;
@@ -22,7 +29,7 @@ public class AttackData : ScriptableObject
     [Tooltip("Duration of knockback effect (how long the force is applied)")]
     public float knockbackDuration = 0.2f;
     
-    [Header("Attack Range")]
+    [Header("Attack Range (fallback if no effect prefab)")]
     [Tooltip("Range of the attack (for melee attacks)")]
     public float attackRange = 1.5f;
     

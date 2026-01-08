@@ -77,8 +77,55 @@ public class CombatController : MonoBehaviour
             Debug.Log($"[Combat] {gameObject.name} performing '{attackData.attackName}'");
         }
         
-        // Find and hit targets
-        DetectAndHitTargets(attackData);
+        // Spawn effect prefab if available (handles its own collision detection)
+        if (attackData.effectPrefab != null)
+        {
+            SpawnAttackEffect(attackData);
+        }
+        else
+        {
+            // Fallback: use sphere detection if no effect prefab
+            DetectAndHitTargets(attackData);
+        }
+    }
+    
+    /// <summary>
+    /// Spawn the attack effect prefab at the attack point
+    /// </summary>
+    private void SpawnAttackEffect(AttackData attackData)
+    {
+        Vector3 spawnPos = attackPoint.position;
+        Quaternion spawnRot = transform.rotation;
+        
+        GameObject effectObj = Instantiate(attackData.effectPrefab, spawnPos, spawnRot);
+        
+        // Initialize the attack effect
+        AttackEffect effect = effectObj.GetComponent<AttackEffect>();
+        if (effect != null)
+        {
+            effect.Initialize(
+                attackData.damage,
+                attackData.knockbackForce,
+                knockbackMultiplier,
+                transform.forward,
+                gameObject,
+                attackData.effectLifetime
+            );
+            effect.SetTargetTag(targetTag);
+            
+            if (debugCombat)
+            {
+                Debug.Log($"[Combat] Spawned attack effect '{attackData.effectPrefab.name}' at {spawnPos}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[Combat] Effect prefab '{attackData.effectPrefab.name}' has no AttackEffect script! Add it for collision detection.");
+            
+            // Still destroy the effect after lifetime
+            float lifetime = attackData.effectLifetime > 0 ? attackData.effectLifetime : 1f;
+            Destroy(effectObj, lifetime);
+        }
     }
     
     /// <summary>

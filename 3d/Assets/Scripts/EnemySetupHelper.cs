@@ -36,9 +36,10 @@ public class EnemySetupHelper : MonoBehaviour
         rb.useGravity = true;
         rb.isKinematic = false;
         rb.constraints = RigidbodyConstraints.FreezeRotation; // Prevent tipping over
-        rb.interpolation = RigidbodyInterpolation.Interpolate;
-        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
-        // Note: Set mass and drag on the Rigidbody component directly as needed
+        rb.interpolation = RigidbodyInterpolation.None;
+        rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+        rb.linearDamping = 0f; // Ensure drag doesn't kill knockback forces
+        // Note: Set mass on the Rigidbody component directly as needed
         Debug.Log($"[EnemySetup] Configured Rigidbody on {gameObject.name}");
         
         // Add Collider if missing
@@ -64,6 +65,10 @@ public class EnemySetupHelper : MonoBehaviour
         Animator animator = GetComponent<Animator>();
         if (animator != null)
         {
+            // Disable Root Motion to allow physics knockback
+            animator.applyRootMotion = false;
+            Debug.Log($"[EnemySetup] Disabled Root Motion on Animator");
+
             EnemyAnimator enemyAnimator = GetComponent<EnemyAnimator>();
             if (enemyAnimator == null)
             {

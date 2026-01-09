@@ -541,7 +541,6 @@ public class TopDownPlayerController : MonoBehaviour
             // Perform combat attack
             if (combatController != null && basicAttackData != null)
             {
-                Debug.Log($"[Player] Performing attack with {basicAttackData.attackName}, range: {basicAttackData.attackRange}");
                 combatController.PerformAttack(basicAttackData);
             }
             else

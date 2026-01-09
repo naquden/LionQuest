@@ -302,6 +302,7 @@ MonoBehaviour:
   skill1AttackData: {fileID: 0}
   skill2AttackData: {fileID: 0}
   skill3AttackData: {fileID: 0}
+  maxHealth: 100
 --- !u!114 &5269021045767024919
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -388,10 +389,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bf0f2ebe9294a4ab8909bafed929a595, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatController
-  knockbackMultiplier: 1
-  hitLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
+  knockbackMultiplier: 2
   targetTag: Enemy
   attackPoint: {fileID: 9163220884009284464}
+  attackPointDistance: 0.8
+  attackPointHeight: 1
   debugCombat: 0

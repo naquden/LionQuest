@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// ScriptableObject that defines attack properties including damage and knockback
-/// Can be created for different attack types and character types
+/// ScriptableObject that defines attack properties including damage and knockback.
+/// Requires an effect prefab with AttackEffect script for hit detection.
 /// </summary>
 [CreateAssetMenu(fileName = "New Attack Data", menuName = "Combat/Attack Data")]
 public class AttackData : ScriptableObject
@@ -11,8 +11,8 @@ public class AttackData : ScriptableObject
     [Tooltip("Name of the attack (for debugging/logging)")]
     public string attackName = "Attack";
     
-    [Header("Effect")]
-    [Tooltip("Prefab to spawn at AttackPoint (should have particle effect and AttackEffect script)")]
+    [Header("Effect (Required)")]
+    [Tooltip("Prefab to spawn at AttackPoint. Must have a Collider and AttackEffect script for hit detection.")]
     public GameObject effectPrefab;
     
     [Tooltip("Lifetime of the effect (auto-destroy after this time, 0 = use particle duration)")]
@@ -25,16 +25,6 @@ public class AttackData : ScriptableObject
     [Header("Knockback")]
     [Tooltip("Force of knockback applied to the target (horizontal only, pushes away from attacker)")]
     public float knockbackForce = 5f;
-    
-    [Tooltip("Duration of knockback effect (how long the force is applied)")]
-    public float knockbackDuration = 0.2f;
-    
-    [Header("Attack Range (fallback if no effect prefab)")]
-    [Tooltip("Range of the attack (for melee attacks)")]
-    public float attackRange = 1.5f;
-    
-    [Tooltip("Angle of attack cone (for melee attacks, in degrees)")]
-    public float attackAngle = 60f;
     
     [Header("Cooldown")]
     [Tooltip("Cooldown time before this attack can be used again")]

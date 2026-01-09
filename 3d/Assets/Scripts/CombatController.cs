@@ -10,11 +10,7 @@ public class CombatController : MonoBehaviour
     [Tooltip("Multiplier applied to all knockback from this character's attacks")]
     [SerializeField] private float knockbackMultiplier = 1f;
     
-    [Header("Hit Detection")]
-    [Tooltip("Layer mask for what this entity can hit")]
-    [SerializeField] private LayerMask hitLayers = -1;
-    
-    [Tooltip("Tag of entities this can hit (e.g., 'Enemy' for player)")]
+    [Tooltip("Tag of entities this can hit (e.g., 'Enemy' for player, 'Player' for enemy)")]
     [SerializeField] private string targetTag = "Enemy";
     
     [Header("References")]
@@ -87,6 +83,12 @@ public class CombatController : MonoBehaviour
             return;
         }
         
+        if (attackData.effectPrefab == null)
+        {
+            Debug.LogError($"[Combat] {gameObject.name}: AttackData '{attackData.attackName}' has no effectPrefab assigned! Attack requires an effect prefab with AttackEffect script.");
+            return;
+        }
+        
         // Check cooldown
         if (Time.time - lastAttackTime < attackData.cooldown)
         {
@@ -100,16 +102,8 @@ public class CombatController : MonoBehaviour
             Debug.Log($"[Combat] {gameObject.name} performing '{attackData.attackName}'");
         }
         
-        // Spawn effect prefab if available (handles its own collision detection)
-        if (attackData.effectPrefab != null)
-        {
-            SpawnAttackEffect(attackData);
-        }
-        else
-        {
-            // Fallback: use sphere detection if no effect prefab
-            DetectAndHitTargets(attackData);
-        }
+        // Spawn effect prefab (handles its own collision detection)
+        SpawnAttackEffect(attackData);
     }
     
     /// <summary>
@@ -124,93 +118,26 @@ public class CombatController : MonoBehaviour
         
         // Initialize the attack effect
         AttackEffect effect = effectObj.GetComponent<AttackEffect>();
-        if (effect != null)
+        if (effect == null)
         {
-            effect.Initialize(
-                attackData.damage,
-                attackData.knockbackForce,
-                knockbackMultiplier,
-                transform.forward,
-                gameObject,
-                attackData.effectLifetime
-            );
-            effect.SetTargetTag(targetTag);
-            
-            if (debugCombat)
-            {
-                Debug.Log($"[Combat] Spawned attack effect '{attackData.effectPrefab.name}' at {spawnPos}");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"[Combat] Effect prefab '{attackData.effectPrefab.name}' has no AttackEffect script! Add it for collision detection.");
-            
-            // Still destroy the effect after lifetime
-            float lifetime = attackData.effectLifetime > 0 ? attackData.effectLifetime : 1f;
-            Destroy(effectObj, lifetime);
-        }
-    }
-    
-    /// <summary>
-    /// Detect targets in range and apply damage/knockback
-    /// </summary>
-    private void DetectAndHitTargets(AttackData attackData)
-    {
-        Collider[] hitColliders = Physics.OverlapSphere(attackPoint.position, attackData.attackRange, hitLayers);
-        Vector3 attackDirection = transform.forward;
-        
-        if (debugCombat && hitColliders.Length == 0)
-        {
-            Debug.Log($"[Combat] No targets found in range {attackData.attackRange}");
+            Debug.LogError($"[Combat] Effect prefab '{attackData.effectPrefab.name}' has no AttackEffect script! Add AttackEffect component to the prefab.");
+            Destroy(effectObj);
+            return;
         }
         
-        foreach (Collider hitCollider in hitColliders)
+        effect.Initialize(
+            attackData.damage,
+            attackData.knockbackForce,
+            knockbackMultiplier,
+            transform.forward,
+            gameObject,
+            attackData.effectLifetime
+        );
+        effect.SetTargetTag(targetTag);
+        
+        if (debugCombat)
         {
-            // Skip if wrong tag
-            if (!string.IsNullOrEmpty(targetTag) && !hitCollider.CompareTag(targetTag))
-            {
-                continue;
-            }
-            
-            // Check attack angle
-            Vector3 directionToTarget = (hitCollider.transform.position - attackPoint.position);
-            directionToTarget.y = 0f;
-            
-            if (directionToTarget.magnitude > 0.01f)
-            {
-                float angle = Vector3.Angle(attackDirection, directionToTarget.normalized);
-                if (angle > attackData.attackAngle / 2f)
-                {
-                    continue;
-                }
-            }
-            
-            // Calculate knockback direction (away from attacker, horizontal only)
-            Vector3 knockbackDir = directionToTarget.normalized;
-            float totalKnockback = attackData.knockbackForce * knockbackMultiplier;
-            
-            // Try to hit Enemy script
-            Enemy enemy = hitCollider.GetComponent<Enemy>();
-            if (enemy != null)
-            {
-                enemy.TakeDamage(attackData.damage, knockbackDir, totalKnockback);
-                
-                Debug.Log($"[Combat] ✓ {gameObject.name} hit {hitCollider.gameObject.name} for {attackData.damage} damage!");
-                OnHitEnemy?.Invoke(hitCollider.gameObject, attackData.damage);
-                continue;
-            }
-            
-            // Fallback: If target has Rigidbody but no Enemy script, just apply force
-            Rigidbody targetRb = hitCollider.GetComponent<Rigidbody>();
-            if (targetRb != null && !targetRb.isKinematic)
-            {
-                targetRb.AddForce(knockbackDir * totalKnockback, ForceMode.Impulse);
-                
-                if (debugCombat)
-                {
-                    Debug.Log($"[Combat] Applied knockback to {hitCollider.gameObject.name} (no Enemy script)");
-                }
-            }
+            Debug.Log($"[Combat] Spawned attack effect '{attackData.effectPrefab.name}' at {spawnPos}");
         }
     }
     
@@ -242,12 +169,9 @@ public class CombatController : MonoBehaviour
     {
         Transform point = attackPoint != null ? attackPoint : transform;
         
-        // Default attack range visualization
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(point.position, 1.5f);
-        
-        // Attack point
+        // Attack point visualization
         Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(point.position, 0.1f);
+        Gizmos.DrawWireSphere(point.position, 0.15f);
+        Gizmos.DrawLine(transform.position, point.position);
     }
 }

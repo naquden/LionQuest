@@ -16,8 +16,5 @@ MonoBehaviour:
   effectPrefab: {fileID: 5503505460791601945, guid: 0efc27d1112ec4d0086c754286948592, type: 3}
   effectLifetime: 0
   damage: 10
-  knockbackForce: 50
-  knockbackDuration: 0.2
-  attackRange: 1.5
-  attackAngle: 60
+  knockbackForce: 3
   cooldown: 0.5

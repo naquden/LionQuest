@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: BasicAttack
   m_EditorClassIdentifier: Assembly-CSharp::AttackData
   attackName: Attack
-  effectPrefab: {fileID: 5503505460791601945, guid: 0efc27d1112ec4d0086c754286948592, type: 3}
+  effectPrefab: {fileID: 5503505460791601945, guid: fe89eeaa06a574aa1ada35d324321844, type: 3}
   effectLifetime: 0
-  damage: 10
-  knockbackForce: 50
+  damage: 1
+  knockbackForce: 10
   knockbackDuration: 0.2
   attackRange: 1.5
   attackAngle: 60
-  cooldown: 0.5
+  cooldown: 2

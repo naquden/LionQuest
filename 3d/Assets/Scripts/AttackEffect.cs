@@ -146,7 +146,7 @@ public class AttackEffect : MonoBehaviour
             }
             return;
         }
-        
+
         // Fallback: apply force to rigidbody
         Rigidbody targetRb = other.GetComponent<Rigidbody>();
         if (targetRb != null && !targetRb.isKinematic)

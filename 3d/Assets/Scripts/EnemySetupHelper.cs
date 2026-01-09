@@ -10,6 +10,11 @@ public class EnemySetupHelper : MonoBehaviour
     [SerializeField] private float colliderRadius = 0.5f;
     [SerializeField] private float colliderHeight = 2f;
     
+    [Header("Optional Prefabs")]
+    [Tooltip("Health Bar prefab (World Space Canvas) to instantiate")]
+    [SerializeField] private GameObject healthBarPrefab;
+    [SerializeField] private Vector3 healthBarOffset = new Vector3(0, 2.2f, 0);
+    
     /// <summary>
     /// Sets up the enemy with all required components.
     /// Call from context menu in editor.
@@ -83,6 +88,23 @@ public class EnemySetupHelper : MonoBehaviour
         {
             combat = gameObject.AddComponent<CombatController>();
             Debug.Log($"[EnemySetup] Added CombatController to {gameObject.name}");
+        }
+        
+        // Instantiate Health Bar if provided
+        if (healthBarPrefab != null)
+        {
+            // Remove existing health bar if found (to force update)
+            Transform existingHealthBar = transform.Find("HealthBar");
+            if (existingHealthBar != null)
+            {
+                DestroyImmediate(existingHealthBar.gameObject);
+                Debug.Log($"[EnemySetup] Removed existing Health Bar");
+            }
+
+            GameObject healthBar = Instantiate(healthBarPrefab, transform);
+            healthBar.name = "HealthBar";
+            healthBar.transform.localPosition = healthBarOffset;
+            Debug.Log($"[EnemySetup] Instantiated new Health Bar prefab");
         }
         
         Debug.Log($"[EnemySetup] Setup complete for {gameObject.name}. You can now remove EnemySetupHelper.");

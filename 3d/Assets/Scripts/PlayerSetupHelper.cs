@@ -10,6 +10,11 @@ public class PlayerSetupHelper : MonoBehaviour
     [SerializeField] private float colliderRadius = 0.5f;
     [SerializeField] private float colliderHeight = 2f;
     
+    [Header("Optional Prefabs")]
+    [Tooltip("Health Bar prefab (World Space Canvas) to instantiate")]
+    [SerializeField] private GameObject healthBarPrefab;
+    [SerializeField] private Vector3 healthBarOffset = new Vector3(0, 2.2f, 0);
+    
     /// <summary>
     /// Sets up the player with all required components.
     /// Call from context menu in editor.
@@ -67,6 +72,23 @@ public class PlayerSetupHelper : MonoBehaviour
         {
             combatController = gameObject.AddComponent<CombatController>();
             Debug.Log($"[PlayerSetup] Added CombatController");
+        }
+        
+        // Instantiate Health Bar if provided
+        if (healthBarPrefab != null)
+        {
+            // Remove existing health bar if found
+            Transform existingHealthBar = transform.Find("HealthBar");
+            if (existingHealthBar != null)
+            {
+                DestroyImmediate(existingHealthBar.gameObject);
+                Debug.Log($"[PlayerSetup] Removed existing Health Bar");
+            }
+
+            GameObject healthBar = Instantiate(healthBarPrefab, transform);
+            healthBar.name = "HealthBar";
+            healthBar.transform.localPosition = healthBarOffset;
+            Debug.Log($"[PlayerSetup] Instantiated new Health Bar prefab");
         }
         
         // Add CharacterAnimator if has Animator

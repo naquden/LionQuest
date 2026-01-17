@@ -74,6 +74,9 @@ public class TopDownPlayerController : MonoBehaviour
     [SerializeField] private float maxHealth = 100f;
     private float currentHealth;
     
+    [Header("Stats")]
+    [SerializeField] private CharacterStats characterStats;
+    
     // Events
     public System.Action<float, float> OnHealthChanged; // current, max
     public System.Action OnDeath;
@@ -281,7 +284,50 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         // Initialize health
+        if (characterStats == null) characterStats = GetComponent<CharacterStats>();
+        
+        if (characterStats != null)
+        {
+            maxHealth = characterStats.GetMaxHealth();
+            Debug.Log($"[Player] Stats loaded from CharacterStats. Max Health: {maxHealth} (Level {characterStats.healthLevel})");
+            
+            // Listen for upgrades to update stats dynamically
+            characterStats.OnStatsUpgraded += UpdateStatsFromUpgrade;
+        }
+        
         currentHealth = maxHealth;
+        
+        // Initialize damage multiplier
+        if (combatController != null && characterStats != null)
+        {
+            float dmgMult = characterStats.GetDamageMultiplier();
+            combatController.SetDamageMultiplier(dmgMult);
+            Debug.Log($"[Player] Damage Multiplier set to {dmgMult}x (Level {characterStats.strengthLevel})");
+        }
+    }
+    
+    private void UpdateStatsFromUpgrade()
+    {
+        if (characterStats == null) return;
+        
+        // Update Max Health (keep percentage or just add difference? Let's just update max)
+        float oldMax = maxHealth;
+        maxHealth = characterStats.GetMaxHealth();
+        
+        // Heal the difference so leveling up feels good
+        if (maxHealth > oldMax)
+        {
+            currentHealth += (maxHealth - oldMax);
+        }
+        
+        // Update Damage
+        if (combatController != null)
+        {
+            combatController.SetDamageMultiplier(characterStats.GetDamageMultiplier());
+        }
+        
+        // Notify UI
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
     
     private void OnEnable()

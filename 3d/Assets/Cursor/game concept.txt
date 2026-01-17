@@ -1,0 +1,53 @@
+# Game Concept: LionQuest 3D (Braintor vs Humans)
+
+## Overview
+A Top-Down 3D Action Roguelite with local co-op. Players control monstrous characters ("Braintors") fighting against waves of humans in various environments. The game emphasizes cooperative play, character progression, and satisfying combat physics.
+
+## Core Pillars
+1.  **Roguelite Progression:** Permanent upgrades (stats) and unlockable characters.
+2.  **Co-op Focus:** Shared rewards encourage teamwork; playing together benefits everyone.
+3.  **Physics-Based Combat:** Satisfying knockback, drag, and impact forces.
+4.  **Accessibility:** Simple controls but deep progression, suitable for young gamers.
+
+## Gameplay Loop
+1.  **The Hub (Lair):**
+    *   Players select their Monster Character (e.g., Assassino Cappuchino, Tank).
+    *   Spend collected "Souls" to upgrade individual character stats (Strength, Health, Speed).
+    *   Switch characters freely.
+
+2.  **The Run (Village/World):**
+    *   Enter a hostile environment populated by humans.
+    *   Fight waves of enemies using Basic Attacks and Skills.
+    *   Enemies drop:
+        *   **Loot:** Health packs and temporary power-ups (on ground).
+        *   **Souls:** Currency given instantly to ALL active players (Global Reward).
+
+3.  **Combat Mechanics:**
+    *   **Attacks:** Spawns effect prefabs with hitboxes.
+    *   **Knockback:** Attacks apply physics-based impulse forces (horizontal only).
+    *   **Movement:** Physics-based movement with drag for smooth control.
+    *   **Enemy AI:** Enemies chase players with velocity-capped forces (allowing for knockback overrides).
+
+## Economy & Progression
+*   **Currency (Souls):**
+    *   Earned by killing enemies.
+    *   **Shared Reward Logic:** When an enemy dies, EVERY active player gets +1 Soul into their character's wallet.
+*   **Stats (Per Character):**
+    *   **Strength:** Increases damage multiplier.
+    *   **Health:** Increases Max HP.
+    *   **Speed:** Increases movement force.
+*   **Save System:**
+    *   Single JSON file (`gamesave.json`) stores progress for ALL characters.
+    *   Allows swapping characters without losing that character's specific progress.
+
+## Technical Architecture
+*   **Input:** Unity Input System (Gamepad/Keyboard).
+*   **Camera:** Dynamic Top-Down camera that tracks the center point of all players.
+*   **Combat:** `CombatController` spawns `AttackEffect` prefabs which handle collision logic.
+*   **Stats:** `CharacterStats` component manages individual progression and talks to static `SaveManager`.
+*   **Setup Helpers:** Editor scripts (`EnemySetupHelper`, `PlayerSetupHelper`) automate component configuration to ensure guidelines are followed.
+
+## Guidelines Compliance
+*   **Physics:** Movement via `Rigidbody.AddForce`. No direct velocity manipulation.
+*   **Scene Safety:** No "Find" fallbacks for critical components; strict error logging.
+*   **Visuals:** URP Shaders, World Space UI for Health Bars (Billboarding).

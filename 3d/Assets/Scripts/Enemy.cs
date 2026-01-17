@@ -145,6 +145,26 @@ public class Enemy : MonoBehaviour
         
         OnDeath?.Invoke();
         
+        // Notify GameController about the kill
+        // It will handle rewarding all active players
+        if (GameSaveController.Instance != null)
+        {
+            // Debug.Log($"[Enemy] Notifying GameController about kill: {gameObject.name}");
+            GameSaveController.Instance.OnEnemyKilled(this);
+        }
+        else
+        {
+            // Fallback for testing/debugging
+            Debug.LogWarning("[Enemy] GameSaveController not found! No rewards given.");
+        }
+        
+        // Drop Loot
+        LootDropper lootDropper = GetComponent<LootDropper>();
+        if (lootDropper != null)
+        {
+            lootDropper.DropLoot();
+        }
+        
         // Disable physics
         rb.isKinematic = true;
         

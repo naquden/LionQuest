@@ -10,6 +10,9 @@ public class CombatController : MonoBehaviour
     [Tooltip("Multiplier applied to all knockback from this character's attacks")]
     [SerializeField] private float knockbackMultiplier = 1f;
     
+    [Tooltip("Multiplier applied to damage (from stats/powerups)")]
+    [SerializeField] private float damageMultiplier = 1f;
+    
     [Tooltip("Tag of entities this can hit (e.g., 'Enemy' for player, 'Player' for enemy)")]
     [SerializeField] private string targetTag = "Enemy";
     
@@ -126,7 +129,7 @@ public class CombatController : MonoBehaviour
         }
         
         effect.Initialize(
-            attackData.damage,
+            attackData.damage * damageMultiplier,
             attackData.knockbackForce,
             knockbackMultiplier,
             transform.forward,
@@ -147,6 +150,14 @@ public class CombatController : MonoBehaviour
     public void SetKnockbackMultiplier(float multiplier)
     {
         knockbackMultiplier = multiplier;
+    }
+    
+    /// <summary>
+    /// Set damage multiplier (for stats/powerups)
+    /// </summary>
+    public void SetDamageMultiplier(float multiplier)
+    {
+        damageMultiplier = multiplier;
     }
     
     /// <summary>

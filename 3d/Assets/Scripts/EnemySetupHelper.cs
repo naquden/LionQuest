@@ -15,6 +15,10 @@ public class EnemySetupHelper : MonoBehaviour
     [SerializeField] private GameObject healthBarPrefab;
     [SerializeField] private Vector3 healthBarOffset = new Vector3(0, 2.2f, 0);
     
+    [Header("Loot")]
+    [Tooltip("Loot Table to assign to LootDropper (optional)")]
+    [SerializeField] private LootTable lootTable;
+    
     /// <summary>
     /// Sets up the enemy with all required components.
     /// Call from context menu in editor.
@@ -105,6 +109,23 @@ public class EnemySetupHelper : MonoBehaviour
             healthBar.name = "HealthBar";
             healthBar.transform.localPosition = healthBarOffset;
             Debug.Log($"[EnemySetup] Instantiated new Health Bar prefab");
+        }
+        
+        // Setup LootDropper if LootTable is provided
+        if (lootTable != null)
+        {
+            LootDropper dropper = GetComponent<LootDropper>();
+            if (dropper == null)
+            {
+                dropper = gameObject.AddComponent<LootDropper>();
+                Debug.Log($"[EnemySetup] Added LootDropper component");
+            }
+            
+            // We can't assign the private field directly via script easily without reflection or public setter,
+            // but since LootDropper is simple, let's just use SerializedObject or suggest manual assignment.
+            // Actually, let's make a public SetLootTable method in LootDropper for this helper.
+            dropper.SetLootTable(lootTable);
+            Debug.Log($"[EnemySetup] Assigned LootTable to LootDropper");
         }
         
         Debug.Log($"[EnemySetup] Setup complete for {gameObject.name}. You can now remove EnemySetupHelper.");

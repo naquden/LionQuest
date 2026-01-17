@@ -103,6 +103,16 @@ public class PlayerSetupHelper : MonoBehaviour
             }
         }
         
+        // Add CharacterStats (Progression)
+        CharacterStats stats = GetComponent<CharacterStats>();
+        if (stats == null)
+        {
+            stats = gameObject.AddComponent<CharacterStats>();
+            // Default ID based on name or random
+            stats.characterID = gameObject.name;
+            Debug.Log($"[PlayerSetup] Added CharacterStats (ID: {stats.characterID})");
+        }
+        
         Debug.Log($"[PlayerSetup] Setup complete for {gameObject.name}");
         Debug.Log($"[PlayerSetup] IMPORTANT: Assign InputActions asset to TopDownPlayerController in Inspector!");
         Debug.Log($"[PlayerSetup] IMPORTANT: Create and assign AttackData ScriptableObjects for attacks!");

@@ -72,7 +72,7 @@ public class TopDownPlayerController : MonoBehaviour
     
     [Header("Health")]
     [SerializeField] private float maxHealth = 100f;
-    private float currentHealth;
+    [SerializeField] public float currentHealth;
     
     [Header("Stats")]
     [SerializeField] private CharacterStats characterStats;

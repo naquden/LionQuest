@@ -4,7 +4,7 @@ using UnityEngine;
 /// ScriptableObject that defines attack properties including damage and knockback.
 /// Requires an effect prefab with AttackEffect script for hit detection.
 /// </summary>
-[CreateAssetMenu(fileName = "New Attack Data", menuName = "Combat/Attack Data")]
+[CreateAssetMenu(fileName = "New Attack Data", menuName = "LionQuest/Attack Data")]
 public class AttackData : ScriptableObject
 {
     [Header("Attack Info")]

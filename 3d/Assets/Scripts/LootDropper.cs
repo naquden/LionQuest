@@ -15,7 +15,19 @@ public class LootDropper : MonoBehaviour
         GameObject drop = lootTable.GetDrop();
         if (drop != null)
         {
-            Instantiate(drop, transform.position, Quaternion.identity);
+            // Calculate drop position (center of collider or default offset)
+            Vector3 spawnPosition = transform.position;
+            Collider col = GetComponent<Collider>();
+            if (col != null)
+            {
+                spawnPosition = col.bounds.center;
+            }
+            else
+            {
+                spawnPosition += Vector3.up * 1f; // Default fallback
+            }
+
+            Instantiate(drop, spawnPosition, Quaternion.identity);
             Debug.Log($"[Loot] Dropped {drop.name} from {gameObject.name}");
         }
     }

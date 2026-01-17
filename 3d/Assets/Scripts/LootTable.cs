@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-[CreateAssetMenu(fileName = "New Loot Table", menuName = "Loot/Loot Table")]
+[CreateAssetMenu(fileName = "New Loot Table", menuName = "LionQuest/Loot Table")]
 public class LootTable : ScriptableObject
 {
     [System.Serializable]

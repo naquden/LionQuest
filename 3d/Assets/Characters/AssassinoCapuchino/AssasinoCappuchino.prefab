@@ -233,6 +233,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3529942959943962677}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3947493487299775733}
   m_SourcePrefab: {fileID: 100100000, guid: a95994103c26b4bb9b1056c1d27ebc96, type: 3}
 --- !u!4 &7185042810576685953 stripped
 Transform:
@@ -278,11 +281,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e113220ade4fd47019168c71fc79a7ae, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TopDownPlayerController
-  moveSpeed: 5
-  sprintMultiplier: 1.5
-  moveForce: 60
-  stopForce: 200
-  drag: 5
+  moveSpeed: 3
+  sprintMultiplier: 1
+  acceleration: 50
+  stopDrag: 10
   mapGenerator: {fileID: 0}
   debugGroundDetection: 1
   rotationSpeed: 10
@@ -303,6 +305,8 @@ MonoBehaviour:
   skill2AttackData: {fileID: 0}
   skill3AttackData: {fileID: 0}
   maxHealth: 100
+  currentHealth: 50
+  characterStats: {fileID: 0}
 --- !u!114 &5269021045767024919
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -390,8 +394,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatController
   knockbackMultiplier: 2
+  damageMultiplier: 1
   targetTag: Enemy
   attackPoint: {fileID: 9163220884009284464}
   attackPointDistance: 0.8
   attackPointHeight: 1
   debugCombat: 0
+--- !u!114 &3947493487299775733
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7565404103289180475}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2989ae0c60014e16acf49bdf6abcfc2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterStats
+  characterID: AssCap
+  souls: 0
+  strengthLevel: 1
+  healthLevel: 1
+  speedLevel: 1

@@ -10,14 +10,15 @@ using UnityEngine.InputSystem;
 public class TopDownPlayerController : MonoBehaviour
 {
     [Header("Movement Settings")]
-    [SerializeField] private float moveSpeed = 5f;
+    [Tooltip("Base movement speed (affected by stats)")]
+    [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float sprintMultiplier = 1.5f;
-    [Tooltip("Force applied for movement (higher = faster acceleration)")]
-    [SerializeField] private float moveForce = 50f;
-    [Tooltip("Force applied to stop movement (higher = stops faster)")]
-    [SerializeField] private float stopForce = 200f;
-    [Tooltip("Drag to slow down movement (higher = stops faster)")]
-    [SerializeField] private float drag = 5f;
+    
+    [Header("Physics Feel")]
+    [Tooltip("How fast the character accelerates")]
+    [SerializeField] private float acceleration = 50f;
+    [Tooltip("How snappy the character stops (Drag)")]
+    [SerializeField] private float stopDrag = 10f;
     
     [Header("Ground Detection")]
     [Tooltip("MapGenerator that contains the ground type map. If not assigned, will try to find it in scene.")]
@@ -130,7 +131,7 @@ public class TopDownPlayerController : MonoBehaviour
         
         // Configure Rigidbody for top-down movement (Unity 6 best practices)
         rb.useGravity = true;
-        rb.linearDamping = drag; // Unity 6: Use linearDamping instead of drag
+        rb.linearDamping = stopDrag; // Initialize with high drag
         rb.angularDamping = 0f; // Prevent rotation from forces
         rb.freezeRotation = true; // Lock rotation on all axes (prevents unwanted rotation)
         rb.interpolation = RigidbodyInterpolation.Interpolate; // Smooth visual movement between physics updates
@@ -348,6 +349,12 @@ public class TopDownPlayerController : MonoBehaviour
     
     private void Update()
     {
+        // Debug Player Position for Jitter
+        if (Time.frameCount % 5 == 0 && rb != null) 
+        {
+             Debug.Log($"[Player] Pos: {transform.position.ToString("F4")} | Vel: {rb.linearVelocity.ToString("F4")}");
+        }
+
         DetectGround();
         CheckGrounded();
         HandleMovement();
@@ -494,53 +501,34 @@ public class TopDownPlayerController : MonoBehaviour
     /// </summary>
     private void ApplyMovementForces()
     {
-        if (rb == null)
-        {
-            return;
-        }
+        if (rb == null) return;
         
-        // Get current horizontal velocity (X-Z plane only, preserve Y for gravity)
+        // Get current horizontal velocity
         Vector3 currentVelocity = rb.linearVelocity;
         Vector3 horizontalVelocity = new Vector3(currentVelocity.x, 0f, currentVelocity.z);
         
-        // Debug: Check if Y velocity is being affected
-        if (debugGroundDetection && isCurrentlyMoving && Mathf.Abs(currentVelocity.y) > 0.1f)
-        {
-            Debug.LogWarning($"Y velocity detected during movement: {currentVelocity.y}. This might be from terrain collision or other forces.");
-        }
-        
         if (isCurrentlyMoving && moveDirection.magnitude > 0.01f)
         {
-            // Apply force in the movement direction, scaled by current speed
-            // This ensures the force respects ground type multipliers and sprint
-            Vector3 force = moveDirection * moveForce * (currentSpeed / moveSpeed);
+            // Moving: Low drag for responsiveness
+            rb.linearDamping = 0f;
+
+            // Calculate force to reach target speed (P-Controller style)
+            // This automatically handles acceleration and maintains max speed naturally
+            Vector3 targetVelocity = moveDirection * currentSpeed;
+            Vector3 velocityDiff = targetVelocity - horizontalVelocity;
             
-            // Debug: Log force being applied
-            if (debugGroundDetection)
-            {
-                Debug.Log($"Applying Force: {force}, MoveDirection: {moveDirection}, MoveForce: {moveForce}, CurrentSpeed: {currentSpeed}, SpeedRatio: {currentSpeed / moveSpeed}");
-            }
-            
-            rb.AddForce(force, ForceMode.Force);
+            // Apply acceleration force
+            rb.AddForce(velocityDiff * acceleration, ForceMode.Force);
         }
         else
         {
-            // No input - stop horizontal movement
-            // Use drag to slow down naturally, but also directly zero small velocities
-            if (horizontalVelocity.magnitude > 0.1f)
+            // Stopping: High drag
+            rb.linearDamping = stopDrag;
+            
+            // Snap to stop if very slow
+            if (horizontalVelocity.sqrMagnitude < 0.1f)
             {
-                // Apply stopping force to bring velocity to zero
-                Vector3 stopDirection = -horizontalVelocity.normalized;
-                Vector3 stoppingForce = stopDirection * stopForce;
-                rb.AddForce(stoppingForce, ForceMode.Force);
-            }
-            else if (horizontalVelocity.magnitude > 0.01f)
-            {
-                // For very small velocities, directly zero them to prevent jitter
-                Vector3 vel = rb.linearVelocity;
-                vel.x = 0f;
-                vel.z = 0f;
-                rb.linearVelocity = vel;
+                rb.linearVelocity = new Vector3(0f, rb.linearVelocity.y, 0f);
             }
         }
     }

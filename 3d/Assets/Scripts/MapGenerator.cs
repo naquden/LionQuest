@@ -60,18 +60,84 @@ public class MapGenerator : MonoBehaviour
     private int terrainResolution;
     private int alphamapResolution;
     
+    // Runtime lookup for speed blending
+    private Dictionary<int, float> layerIndexToSpeed = new Dictionary<int, float>();
+    private Dictionary<int, bool> layerIndexToIsHole = new Dictionary<int, bool>();
+    
     private void Awake()
     {
+        Debug.Log($"[MapGenerator] Awake running. GenerateOnStart: {generateOnStart}");
+
         InitializeTerrain();
-    }
-    
-    private void Start()
-    {
-        // Auto-generate map on start if enabled
+        
+        // Auto-generate map on awake if enabled to ensure it's ready for other scripts
         if (generateOnStart && groundTypeMap == null)
         {
             GenerateMap();
         }
+        else if (!generateOnStart)
+        {
+            Debug.LogWarning("[MapGenerator] Auto-generation is DISABLED. Trying to rebuild runtime data from existing terrain...");
+            RebuildRuntimeData();
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds runtime lookup tables (speed, hole checks) from existing terrain data without regenerating the map.
+    /// This allows playing with pre-generated or hand-painted maps.
+    /// </summary>
+    private void RebuildRuntimeData()
+    {
+        if (terrain == null || terrainData == null)
+        {
+            Debug.LogError("[MapGenerator] Cannot rebuild runtime data: Terrain not initialized!");
+            return;
+        }
+
+        layerIndexToSpeed.Clear();
+        layerIndexToIsHole.Clear();
+
+        if (terrainData.terrainLayers == null || terrainData.terrainLayers.Length == 0)
+        {
+            Debug.LogWarning("[MapGenerator] No terrain layers found on existing terrain!");
+            return;
+        }
+
+        Debug.Log($"[MapGenerator] Found {terrainData.terrainLayers.Length} terrain layers. Matching with {availableGroundTypes.Count} available GroundTypes...");
+
+        for (int i = 0; i < terrainData.terrainLayers.Length; i++)
+        {
+            TerrainLayer layer = terrainData.terrainLayers[i];
+            bool foundMatch = false;
+
+            foreach (var groundType in availableGroundTypes)
+            {
+                // Match by texture (Diffuse Texture is usually unique enough)
+                if (groundType.terrainTexture == layer.diffuseTexture)
+                {
+                    layerIndexToSpeed[i] = groundType.movementSpeedMultiplier;
+                    layerIndexToIsHole[i] = groundType.isHole;
+                    Debug.Log($"[MapGenerator] Matched Layer {i} ({layer.name}) to GroundType '{groundType.groundName}'. Speed: {groundType.movementSpeedMultiplier}, IsHole: {groundType.isHole}");
+                    foundMatch = true;
+                    break;
+                }
+            }
+
+            if (!foundMatch)
+            {
+                Debug.LogWarning($"[MapGenerator] Layer {i} ({layer.name}) has no matching GroundType in 'availableGroundTypes'. Defaulting to Speed=1, IsHole=False.");
+                layerIndexToSpeed[i] = 1f;
+                layerIndexToIsHole[i] = false;
+            }
+        }
+        
+        // Important: IsMapGenerated() checks terrain != null. 
+        // We consider the map "generated" for gameplay purposes if we have data, even if groundTypeMap is null.
+    }
+
+    
+    private void Start()
+    {
     }
     
     /// <summary>
@@ -388,6 +454,9 @@ public class MapGenerator : MonoBehaviour
     /// </summary>
     private void ApplyTerrainTextures()
     {
+        layerIndexToSpeed.Clear();
+        layerIndexToIsHole.Clear();
+
         // Get unique ground types (only those with textures)
         List<GroundType> typesWithTextures = new List<GroundType>();
         HashSet<GroundType> uniqueTypes = new HashSet<GroundType>();
@@ -424,6 +493,11 @@ public class MapGenerator : MonoBehaviour
                 layer.tileSize = groundType.textureTiling;
                 terrainLayers[layerIndex] = layer;
                 groundTypeToLayerIndex[groundType] = layerIndex;
+                
+                // Cache properties for runtime lookup
+                layerIndexToSpeed[layerIndex] = groundType.movementSpeedMultiplier;
+                layerIndexToIsHole[layerIndex] = groundType.isHole;
+
                 layerIndex++;
             }
         }
@@ -478,15 +552,145 @@ public class MapGenerator : MonoBehaviour
             }
         }
         
+        // Smooth the boundaries
+        alphaMap = SmoothAlphaMap(alphaMap);
+
         terrainData.SetAlphamaps(0, 0, alphaMap);
+    }
+
+    private float[,,] SmoothAlphaMap(float[,,] originalMap)
+    {
+        int width = originalMap.GetLength(0);
+        int height = originalMap.GetLength(1);
+        int layers = originalMap.GetLength(2);
+        
+        float[,,] smoothMap = new float[width, height, layers];
+        int radius = 2; // Blur radius (increase for smoother transitions)
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                for (int l = 0; l < layers; l++)
+                {
+                    float sum = 0;
+                    int count = 0;
+                    
+                    for (int dx = -radius; dx <= radius; dx++)
+                    {
+                        for (int dy = -radius; dy <= radius; dy++)
+                        {
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                            {
+                                sum += originalMap[nx, ny, l];
+                                count++;
+                            }
+                        }
+                    }
+                    smoothMap[x, y, l] = sum / count;
+                }
+            }
+        }
+        return smoothMap;
     }
     
     /// <summary>
-    /// Checks if the map has been generated
+    /// Checks if the map has been generated or successfully loaded
     /// </summary>
     public bool IsMapGenerated()
     {
+        // If we have lookup data, we consider the map usable
+        if (layerIndexToSpeed.Count > 0 && terrain != null && terrainData != null)
+        {
+            return true;
+        }
         return groundTypeMap != null && terrain != null && terrainData != null;
+    }
+
+    /// <summary>
+    /// Gets the weighted average movement speed multiplier at a world position based on terrain blending.
+    /// This provides smooth speed transitions between biomes.
+    /// </summary>
+    public float GetSmoothedSpeedMultiplierAtPosition(Vector3 worldPosition)
+    {
+        if (terrain == null || terrainData == null) return 1f;
+
+        // Convert world pos to alphamap coordinates
+        float mapX = ((worldPosition.x - terrain.transform.position.x) / terrainData.size.x) * terrainData.alphamapWidth;
+        float mapZ = ((worldPosition.z - terrain.transform.position.z) / terrainData.size.z) * terrainData.alphamapHeight;
+
+        int x = Mathf.FloorToInt(mapX);
+        int y = Mathf.FloorToInt(mapZ);
+
+        // Check bounds
+        if (x < 0 || x >= terrainData.alphamapWidth || y < 0 || y >= terrainData.alphamapHeight)
+        {
+            return 1f;
+        }
+
+        // Sample alphamap (1x1 block)
+        float[,,] splatmapData = terrainData.GetAlphamaps(x, y, 1, 1);
+        int numLayers = splatmapData.GetLength(2);
+        
+        float weightedSpeed = 0f;
+        float totalWeight = 0f;
+        
+        for (int i = 0; i < numLayers; i++)
+        {
+            float weight = splatmapData[0, 0, i];
+            if (weight > 0.01f) // Ignore negligible weights
+            {
+                if (layerIndexToSpeed.TryGetValue(i, out float speed))
+                {
+                    weightedSpeed += speed * weight;
+                    totalWeight += weight;
+                    Debug.Log($"[MapGen] Layer {i}: Weight={weight:F2}, Speed={speed:F2}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[MapGen] Layer {i} has weight {weight:F2} but no speed in lookup! (Did you regenerate map?)");
+                }
+            }
+        }
+        
+        float finalSpeed = totalWeight > 0.01f ? weightedSpeed / totalWeight : 1f;
+        Debug.Log($"[MapGen] Final Smoothed Speed: {finalSpeed:F2}");
+        return finalSpeed;
+    }
+
+    /// <summary>
+    /// Checks if the position is effectively a hole (dominant texture is hole)
+    /// </summary>
+    public bool IsHoleAtPosition(Vector3 worldPosition)
+    {
+        if (terrain == null || terrainData == null) return false;
+
+        float mapX = ((worldPosition.x - terrain.transform.position.x) / terrainData.size.x) * terrainData.alphamapWidth;
+        float mapZ = ((worldPosition.z - terrain.transform.position.z) / terrainData.size.z) * terrainData.alphamapHeight;
+        
+        int x = Mathf.FloorToInt(mapX);
+        int y = Mathf.FloorToInt(mapZ);
+
+        if (x < 0 || x >= terrainData.alphamapWidth || y < 0 || y >= terrainData.alphamapHeight) return false;
+
+        float[,,] splatmapData = terrainData.GetAlphamaps(x, y, 1, 1);
+        int numLayers = splatmapData.GetLength(2);
+        
+        float holeWeight = 0f;
+        
+        for (int i = 0; i < numLayers; i++)
+        {
+            if (layerIndexToIsHole.TryGetValue(i, out bool isHole) && isHole)
+            {
+                holeWeight += splatmapData[0, 0, i];
+            }
+        }
+        
+        // Consider it a hole if > 50% hole texture
+        return holeWeight > 0.5f;
     }
     
     /// <summary>

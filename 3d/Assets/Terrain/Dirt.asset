@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GroundType
   groundName: Dirt
   biomeColor: {r: 0.5377358, g: 0.23150109, b: 0.10399607, a: 1}
-  movementSpeedMultiplier: 0.52
+  movementSpeedMultiplier: 0.608
   isWalkable: 1
   isHole: 0
   fallSpeedMultiplier: 1

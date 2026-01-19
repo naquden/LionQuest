@@ -352,7 +352,7 @@ public class TopDownPlayerController : MonoBehaviour
         // Debug Player Position for Jitter
         if (Time.frameCount % 5 == 0 && rb != null) 
         {
-             Debug.Log($"[Player] Pos: {transform.position.ToString("F4")} | Vel: {rb.linearVelocity.ToString("F4")}");
+             // Debug.Log($"[Player] Pos: {transform.position.ToString("F4")} | Vel: {rb.linearVelocity.ToString("F4")}");
         }
 
         DetectGround();
@@ -388,31 +388,32 @@ public class TopDownPlayerController : MonoBehaviour
         // Check if sprinting
         bool isSprinting = sprintAction != null && sprintAction.IsPressed();
         
-        // Get ground type speed multiplier
+        // Get ground type speed multiplier (smoothed)
         float groundSpeedMultiplier = 1f;
-        if (currentGroundType != null)
+        
+        if (mapGenerator != null && mapGenerator.IsMapGenerated())
         {
-            groundSpeedMultiplier = currentGroundType.movementSpeedMultiplier;
+            // Use smoothed speed multiplier for fluid movement
+            groundSpeedMultiplier = mapGenerator.GetSmoothedSpeedMultiplierAtPosition(transform.position);
+            
+            // Check for holes (fall logic)
+            // We still use the discrete check for falling because falling is binary (you fall or you don't)
+            if (mapGenerator.IsHoleAtPosition(transform.position) && isGrounded && !isFalling)
+            {
+                isFalling = true;
+            }
             
             if (debugGroundDetection && isCurrentlyMoving)
             {
-                Debug.Log($"Ground Type: {currentGroundType.groundName}, Speed Multiplier: {groundSpeedMultiplier}");
-            }
-            
-            // Check if player is on a hole and should fall through
-            if (currentGroundType.isHole && isGrounded && !isFalling)
-            {
-                // Start falling through hole - disable ground collision temporarily
-                isFalling = true;
+                Debug.Log($"Smoothed Speed Multiplier: {groundSpeedMultiplier:F2}");
             }
         }
         else
         {
-            // If no ground type detected, use default speed (no multiplier)
-            groundSpeedMultiplier = 1f;
-            if (!hasWarnedAboutMissingGroundType)
+            // Allow some time for map to generate on start
+            if (Time.time > 1f && !hasWarnedAboutMissingGroundType)
             {
-                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': No ground type detected! Make sure MapGenerator has generated the map and is in the scene. This warning will only be shown once.");
+                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': No ground type detected! Make sure MapGenerator has generated the map.");
                 hasWarnedAboutMissingGroundType = true;
             }
         }
@@ -470,7 +471,7 @@ public class TopDownPlayerController : MonoBehaviour
         {
             if (isCurrentlyMoving)
             {
-                Debug.Log($"Move Direction: {moveDirection}, Input: {input}, Current Speed: {currentSpeed}");
+                // Debug.Log($"Move Direction: {moveDirection}, Input: {input}, Current Speed: {currentSpeed}");
             }
             else if (input.magnitude > 0.01f)
             {
@@ -643,30 +644,8 @@ public class TopDownPlayerController : MonoBehaviour
     /// </summary>
     private void DetectGround()
     {
-        // Validate MapGenerator is assigned
-        if (mapGenerator == null)
-        {
-            currentGroundType = null;
-            return;
-        }
-        
-        // Check if map has been generated - if not, try to generate it
-        if (!mapGenerator.IsMapGenerated())
-        {
-            if (!hasWarnedAboutMissingGroundType)
-            {
-                Debug.LogWarning($"TopDownPlayerController on '{gameObject.name}': MapGenerator map has not been generated yet. Attempting to generate map...");
-                mapGenerator.GenerateMap();
-                hasWarnedAboutMissingGroundType = true;
-            }
-            currentGroundType = null;
-            return;
-        }
-        
-        // Get ground type from MapGenerator
-        // Use the player's position projected onto the ground (X and Z, Y at ground level)
-        Vector3 groundPosition = new Vector3(transform.position.x, 0f, transform.position.z);
-        currentGroundType = mapGenerator.GetGroundTypeAtPosition(groundPosition);
+        // Ground detection is now handled directly in HandleMovement using smoothed lookups
+        // This method is kept empty or can be removed if not used elsewhere
     }
     
     /// <summary>

@@ -33,7 +33,7 @@ public class TopDownCameraController : MonoBehaviour
     [SerializeField] private float distanceMultiplier = 0.5f;
     
     [Header("Camera Angle")]
-    [SerializeField] private float tiltAngle = 45f; // Angle from horizontal (0 = top-down, 90 = side view)
+    [SerializeField] private float tiltAngle = 60f; // Angle from horizontal (0 = top-down, 90 = side view)
     [SerializeField] private float rotationAngle = 45f; // Rotation around Y-axis for isometric look
     
     [Header("Camera Settings")]
@@ -226,19 +226,21 @@ public class TopDownCameraController : MonoBehaviour
         float verticalDistance = currentDistance * Mathf.Sin(tiltRad);
         
         // Calculate position offset based on rotation angle
-        float offsetX = horizontalDistance * Mathf.Sin(rotationRad);
+        float offsetX = -horizontalDistance * Mathf.Sin(rotationRad);
         float offsetZ = -horizontalDistance * Mathf.Cos(rotationRad);
-        float offsetY = verticalDistance + height;
+        float offsetY = verticalDistance;
+        
+        // Apply height offset to the target position (Look at head instead of feet)
+        Vector3 targetPosWithHeight = centerPosition + new Vector3(0f, height, 0f);
         
         // Calculate desired position relative to centralized position
-        Vector3 desiredPosition = centerPosition + new Vector3(offsetX, offsetY, offsetZ);
+        Vector3 desiredPosition = targetPosWithHeight + new Vector3(offsetX, offsetY, offsetZ);
         
         // Smoothly follow the centralized position
         transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref currentVelocity, 1f / followSpeed);
         
-        // Look at the centralized position (with optional offset)
-        Vector3 lookAtPoint = centerPosition + lookAtOffset;
-        transform.LookAt(lookAtPoint);
+        // Maintain fixed rotation (do NOT use LookAt, as it causes jitter when target moves)
+        transform.rotation = Quaternion.Euler(tiltAngle, rotationAngle, 0f);
     }
     
     /// <summary>

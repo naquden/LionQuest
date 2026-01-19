@@ -472,7 +472,7 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         // Rotate towards movement direction
-        if (isCurrentlyMoving && rotateTowardsMovement)
+        if (isCurrentlyMoving && rotateTowardsMovement && moveDirection.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);

@@ -17,6 +17,7 @@ public class EnemyAnimator : MonoBehaviour
     
     private Animator animator;
     private Rigidbody rb;
+    private Vector3 lastPos;
     
     // Track which parameters exist
     private bool hasMovingParam;
@@ -29,8 +30,14 @@ public class EnemyAnimator : MonoBehaviour
     private void Awake()
     {
         animator = GetComponent<Animator>();
-        rb = GetComponent<Rigidbody>();
+        // Changed to GetComponentInParent to handle case where script is on Child Model but RB is on Root
+        rb = GetComponentInParent<Rigidbody>(); 
         
+        if (rb == null) 
+        {
+            Debug.LogError($"[EnemyAnimator] CRITICAL: No Rigidbody found on {gameObject.name} or parents! Animation will not work.");
+        }
+
         // Check which parameters exist in the animator
         DetectParameters();
     }
@@ -42,6 +49,7 @@ public class EnemyAnimator : MonoBehaviour
     {
         if (animator == null || animator.runtimeAnimatorController == null)
         {
+            Debug.LogError($"[EnemyAnimator] Animator or Controller missing on {gameObject.name}");
             return;
         }
         
@@ -53,16 +61,35 @@ public class EnemyAnimator : MonoBehaviour
             else if (param.name == hitTrigger) hasHitTrigger = true;
             else if (param.name == deathTrigger) hasDeathTrigger = true;
             else if (param.name == deadParam) hasDeadParam = true;
+
+            // Debug help for typos
+            if (!hasSpeedParam && param.name.ToLower() == speedParam.ToLower())
+            {
+                Debug.LogWarning($"[EnemyAnimator] Case mismatch! Found '{param.name}' but script expects '{speedParam}'.");
+            }
         }
     }
     
     private void Update()
     {
-        // Update speed parameter based on actual velocity
-        if (hasSpeedParam && rb != null)
+        if (rb == null) return;
+
+        // Physics speed
+        float physicsSpeed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
+        
+        // Manual speed
+        float manualSpeed = 0f;
+        if (Time.deltaTime > 0f)
         {
-            float speed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
-            animator.SetFloat(speedParam, speed);
+            manualSpeed = (transform.position - lastPos).magnitude / Time.deltaTime;
+        }
+        lastPos = transform.position;
+
+        float effectiveSpeed = Mathf.Max(physicsSpeed, manualSpeed);
+
+        if (hasSpeedParam)
+        {
+            animator.SetFloat(speedParam, effectiveSpeed);
         }
     }
     

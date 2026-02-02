@@ -217,10 +217,14 @@ public class TopDownPlayerController : MonoBehaviour
             Debug.LogError($"TopDownPlayerController on '{gameObject.name}': InputActions asset is not assigned! Please assign it in the inspector.");
         }
         
-        // Try to find CharacterAnimator if not assigned (optional component)
+        // Try to find CharacterAnimator if not assigned (often on child model, like EnemyHero)
         if (characterAnimator == null)
         {
             characterAnimator = GetComponent<CharacterAnimator>();
+            if (characterAnimator == null)
+                characterAnimator = GetComponentInChildren<CharacterAnimator>();
+            if (characterAnimator == null)
+                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': CharacterAnimator is not assigned and could not be found on this object or children. Assign it in the inspector or add a CharacterAnimator to the character model for walk/run animations.");
         }
         
         // Try to find or create CombatController if not assigned

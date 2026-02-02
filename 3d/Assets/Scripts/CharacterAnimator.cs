@@ -12,9 +12,6 @@ public class CharacterAnimator : MonoBehaviour
     [Tooltip("Name of the float parameter for movement speed (0 = idle, >0 = walking)")]
     [SerializeField] private string speedParameter = "Speed";
     
-    [Tooltip("Name of the boolean parameter for walking state (optional, alternative to Speed)")]
-    [SerializeField] private string isWalkingParameter = "IsWalking";
-    
     [Tooltip("Name of the boolean parameter for sprinting state (optional)")]
     [SerializeField] private string isSprintingParameter = "IsSprinting";
     
@@ -45,15 +42,22 @@ public class CharacterAnimator : MonoBehaviour
     [Tooltip("Name of the boolean parameter for death state")]
     [SerializeField] private string isDeadParameter = "IsDead";
     
+    [Header("Movement (velocity-based, like EnemyAnimator)")]
+    [Tooltip("Reference speed for normalizing Speed parameter to 0-1. Set to your move speed.")]
+    [SerializeField] private float maxSpeedForNormalization = 6f;
+    
     [Header("Debug")]
     [Tooltip("Enable to see animation parameter updates in console")]
     [SerializeField] private bool debugLog = false;
     
     private Animator animator;
+    private Rigidbody rb;
+    private Vector3 lastPos;
+    /// <summary> When true, Update() will not overwrite Speed (controller is driving this frame). </summary>
+    private bool movementSetExternallyThisFrame;
     
     // Parameter existence flags
     private bool hasSpeedParam;
-    private bool hasIsWalkingParam;
     private bool hasIsSprintingParam;
     private bool hasAttackTriggerParam;
     private bool hasAttackTypeParam;
@@ -81,6 +85,7 @@ public class CharacterAnimator : MonoBehaviour
     private void Awake()
     {
         animator = GetComponent<Animator>();
+        rb = GetComponentInParent<Rigidbody>();
         
         if (animator == null)
         {
@@ -88,9 +93,13 @@ public class CharacterAnimator : MonoBehaviour
             return;
         }
         
+        if (rb == null && debugLog)
+        {
+            Debug.LogWarning($"CharacterAnimator on '{gameObject.name}': No Rigidbody on self or parents. Movement animation will only update when UpdateAnimations() is called.");
+        }
+        
         // Check which parameters exist in the Animator Controller
         hasSpeedParam = HasParameter(speedParameter, AnimatorControllerParameterType.Float);
-        hasIsWalkingParam = HasParameter(isWalkingParameter, AnimatorControllerParameterType.Bool);
         hasIsSprintingParam = HasParameter(isSprintingParameter, AnimatorControllerParameterType.Bool);
         hasAttackTriggerParam = HasParameter(attackTriggerParameter, AnimatorControllerParameterType.Trigger);
         hasAttackTypeParam = HasParameter(attackTypeParameter, AnimatorControllerParameterType.Int);
@@ -108,6 +117,33 @@ public class CharacterAnimator : MonoBehaviour
         }
     }
     
+    private void Update()
+    {
+        if (animator == null || !animator.enabled || isDead) return;
+        // If the controller called UpdateAnimations() this frame, don't overwrite with velocity (velocity is updated in FixedUpdate and often still 0 here)
+        if (movementSetExternallyThisFrame)
+        {
+            movementSetExternallyThisFrame = false;
+            return;
+        }
+        if (rb == null) return;
+
+        // Drive movement animation from Rigidbody velocity (like EnemyAnimator) when no external controller is driving
+        float physicsSpeed = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude;
+        float manualSpeed = 0f;
+        if (Time.deltaTime > 0f)
+        {
+            manualSpeed = (transform.position - lastPos).magnitude / Time.deltaTime;
+        }
+        lastPos = transform.position;
+
+        float effectiveSpeed = Mathf.Max(physicsSpeed, manualSpeed);
+        float normalizedSpeed = maxSpeedForNormalization > 0f ? Mathf.Clamp01(effectiveSpeed / maxSpeedForNormalization) : effectiveSpeed;
+
+        if (hasSpeedParam)
+            animator.SetFloat(speedParameter, normalizedSpeed);
+    }
+    
     /// <summary>
     /// Updates movement-based animations (Idle, Walk, Sprint)
     /// Call this from your movement controller each frame
@@ -121,6 +157,7 @@ public class CharacterAnimator : MonoBehaviour
         {
             return; // Don't update movement animations if dead
         }
+        movementSetExternallyThisFrame = true; // So Update() doesn't overwrite with velocity (which is often 0 before FixedUpdate)
         
         // Set speed parameter (preferred method for smooth blending)
         if (hasSpeedParam)
@@ -135,12 +172,6 @@ public class CharacterAnimator : MonoBehaviour
         else if (debugLog)
         {
             Debug.LogWarning($"CharacterAnimator: Speed parameter '{speedParameter}' not found in Animator Controller!");
-        }
-        
-        // Set walking state (alternative method)
-        if (hasIsWalkingParam)
-        {
-            animator.SetBool(isWalkingParameter, isMoving);
         }
         
         // Set sprinting state
@@ -374,11 +405,6 @@ public class CharacterAnimator : MonoBehaviour
         if (hasSpeedParam)
         {
             animator.SetFloat(speedParameter, 0f);
-        }
-        
-        if (hasIsWalkingParam)
-        {
-            animator.SetBool(isWalkingParameter, false);
         }
         
         if (hasIsSprintingParam)

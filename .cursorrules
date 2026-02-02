@@ -1,0 +1,27 @@
+# Cursor AI Guidelines for LionQuest Unity Project
+
+**Component and GameObject References:**
+- Do NOT use fallbacks (FindObjectOfType, FindGameObjectWithTag, Camera.main, etc.) when unable to find scene-specific GameObjects or components
+- Print errors in console (Debug.LogError) when crucial components are missing, since this is critical for the game to work properly
+- As a developer, you need to know if anything is missing from the scene so you can fix it - that is better than falling back to something with unexpected behavior
+- Required components must be assigned in the inspector - if they're missing, error immediately rather than silently failing or using incorrect fallbacks
+
+**Documentation:**
+- Do NOT create markdown (.md) files unless explicitly requested by the user
+
+**Scene Files:**
+- Do NOT modify or change Scene files (.unity) unless explicitly approved by the user
+- Scene modifications must be explicitly requested - never make scene changes proactively
+
+**Physics and Movement:**
+- All movement must be done using Rigidbody.AddForce() unless explicitly stated otherwise
+- Do NOT directly set Rigidbody.linearVelocity or transform.position for movement
+- Let Unity's physics system handle velocity changes, deceleration, and collisions naturally
+- Configure mass, drag (linearDamping), and constraints on the Rigidbody component in the Inspector
+
+**Script Architecture:**
+- Keep scripts minimal - prefer fewer scripts with more functionality over many small scripts
+- Do NOT create separate scripts for things that can be part of a main script (e.g., health belongs in Enemy script, not a separate Health script)
+- Do NOT duplicate fields in scripts that already exist on components (e.g., mass/drag belong on Rigidbody, not in script fields)
+- Use one SetupHelper script per entity type to add required components (Rigidbody, Collider, etc.) - this is an editor helper, not runtime logic
+- Prefer using Unity's built-in components and their Inspector settings over custom script fields

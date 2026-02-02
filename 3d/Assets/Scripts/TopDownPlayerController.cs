@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections;
 
 /// <summary>
 /// Top-down player controller with 4-directional movement using Rigidbody forces
@@ -65,8 +66,11 @@ public class TopDownPlayerController : MonoBehaviour
     [Tooltip("Attack data for Skill 1")]
     [SerializeField] private AttackData skill1AttackData;
     
-    [Tooltip("Attack data for Skill 2")]
+    [Tooltip("Attack data for Skill 2 (use this OR skill2ProjectileData, not both)")]
     [SerializeField] private AttackData skill2AttackData;
+    
+    [Tooltip("Projectile skill data for Skill 2 (e.g., shuriken throw). If set, this is used instead of skill2AttackData.")]
+    [SerializeField] private ProjectileSkillData skill2ProjectileData;
     
     [Tooltip("Attack data for Skill 3")]
     [SerializeField] private AttackData skill3AttackData;
@@ -101,6 +105,7 @@ public class TopDownPlayerController : MonoBehaviour
     private bool isGrounded = false;
     private GroundType currentGroundType;
     private bool hasWarnedAboutMissingGroundType = false;
+    private float lastSkill2ProjectileTime = -999f;
     
     /// <summary>
     /// Returns whether the character is currently moving
@@ -615,15 +620,35 @@ public class TopDownPlayerController : MonoBehaviour
         
         if (skill2Action != null && skill2Action.WasPressedThisFrame())
         {
-            if (characterAnimator != null)
+            // Check if using projectile skill (e.g., shuriken throw)
+            if (skill2ProjectileData != null)
             {
-                characterAnimator.TriggerSkill2();
+                // Check cooldown
+                if (Time.time - lastSkill2ProjectileTime >= skill2ProjectileData.cooldown)
+                {
+                    lastSkill2ProjectileTime = Time.time;
+                    
+                    if (characterAnimator != null)
+                    {
+                        characterAnimator.TriggerSkill2();
+                    }
+                    
+                    // Start timed projectile spawning
+                    StartCoroutine(SpawnProjectilesAtTimes(skill2ProjectileData));
+                }
             }
-            
-            // Perform skill 2 attack
-            if (combatController != null && skill2AttackData != null)
+            else
             {
-                combatController.PerformAttack(skill2AttackData);
+                // Fallback to regular attack data
+                if (characterAnimator != null)
+                {
+                    characterAnimator.TriggerSkill2();
+                }
+                
+                if (combatController != null && skill2AttackData != null)
+                {
+                    combatController.PerformAttack(skill2AttackData);
+                }
             }
         }
         
@@ -642,6 +667,78 @@ public class TopDownPlayerController : MonoBehaviour
         }
     }
     
+    
+    /// <summary>
+    /// Spawns projectiles at specific times during the skill animation
+    /// </summary>
+    private IEnumerator SpawnProjectilesAtTimes(ProjectileSkillData skillData)
+    {
+        if (skillData == null || skillData.projectilePrefab == null)
+        {
+            Debug.LogError($"TopDownPlayerController: ProjectileSkillData or projectilePrefab is null!");
+            yield break;
+        }
+        
+        float[] spawnTimes = skillData.GetSpawnTimesInSeconds();
+        float elapsedTime = 0f;
+        int projectilesSpawned = 0;
+        
+        // Store the facing direction at skill start (so all projectiles go the same way)
+        Vector3 skillDirection = transform.forward;
+        
+        while (projectilesSpawned < spawnTimes.Length)
+        {
+            elapsedTime += Time.deltaTime;
+            
+            // Check if it's time to spawn the next projectile
+            if (projectilesSpawned < spawnTimes.Length && elapsedTime >= spawnTimes[projectilesSpawned])
+            {
+                SpawnProjectile(skillData, skillDirection);
+                projectilesSpawned++;
+            }
+            
+            yield return null;
+        }
+    }
+    
+    /// <summary>
+    /// Spawn a single projectile
+    /// </summary>
+    private void SpawnProjectile(ProjectileSkillData skillData, Vector3 direction)
+    {
+        // Calculate spawn position (player position + offset rotated to face direction)
+        Vector3 spawnPos = transform.position + transform.TransformDirection(skillData.spawnOffset);
+        Quaternion spawnRot = Quaternion.LookRotation(direction);
+        
+        // Instantiate projectile
+        GameObject projectileObj = Instantiate(skillData.projectilePrefab, spawnPos, spawnRot);
+        
+        // Initialize projectile
+        Projectile projectile = projectileObj.GetComponent<Projectile>();
+        if (projectile != null)
+        {
+            // Get damage multiplier from combat controller if available
+            float damageMultiplier = 1f;
+            if (combatController != null)
+            {
+                // Use reflection or add a getter - for now use base damage
+            }
+            
+            projectile.Initialize(
+                skillData.damage * damageMultiplier,
+                skillData.knockbackForce,
+                direction,
+                gameObject
+            );
+            projectile.SetSpeed(skillData.projectileSpeed);
+            projectile.SetTargetTag("Enemy");
+        }
+        else
+        {
+            Debug.LogError($"TopDownPlayerController: Projectile prefab '{skillData.projectilePrefab.name}' has no Projectile script!");
+            Destroy(projectileObj);
+        }
+    }
     
     /// <summary>
     /// Detects the ground type at the player's position

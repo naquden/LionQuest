@@ -303,6 +303,7 @@ MonoBehaviour:
   basicAttackData: {fileID: 11400000, guid: dd784e5d1b590442988ed86533883f38, type: 2}
   skill1AttackData: {fileID: 0}
   skill2AttackData: {fileID: 0}
+  skill2ProjectileData: {fileID: 11400000, guid: bad4dfd02479a4300ac1814a6995d0d2, type: 2}
   skill3AttackData: {fileID: 0}
   maxHealth: 100
   currentHealth: 50
@@ -320,7 +321,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterAnimator
   speedParameter: Speed
-  isWalkingParameter: IsWalking
   isSprintingParameter: IsSprinting
   attackTriggerParameter: Attack
   attackTypeParameter: AttackType
@@ -330,7 +330,8 @@ MonoBehaviour:
   dieTriggerParameter: Die
   ariseTriggerParameter: Arise
   isDeadParameter: IsDead
-  debugLog: 0
+  maxSpeedForNormalization: 6
+  debugLog: 1
 --- !u!54 &3701478468408263465
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -399,7 +400,7 @@ MonoBehaviour:
   attackPoint: {fileID: 9163220884009284464}
   attackPointDistance: 0.8
   attackPointHeight: 1
-  debugCombat: 0
+  debugCombat: 1
 --- !u!114 &3947493487299775733
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -15,8 +15,9 @@ public class AttackData : ScriptableObject
     [Tooltip("Prefab to spawn at AttackPoint. Must have a Collider and AttackEffect script for hit detection.")]
     public GameObject effectPrefab;
     
-    [Tooltip("Lifetime of the effect (auto-destroy after this time, 0 = use particle duration)")]
-    public float effectLifetime = 0f;
+    [Tooltip("How long the hit detection collider is active (in seconds). Keep short (0.1-0.2s) so the static collider matches the attack animation moment. The particle visual will continue playing until finished.")]
+    [Range(0.05f, 1f)]
+    public float hitWindowDuration = 0.15f;
     
     [Header("Damage")]
     [Tooltip("Base damage dealt by this attack")]

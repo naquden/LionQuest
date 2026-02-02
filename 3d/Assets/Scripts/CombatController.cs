@@ -134,7 +134,7 @@ public class CombatController : MonoBehaviour
             knockbackMultiplier,
             transform.forward,
             gameObject,
-            attackData.effectLifetime
+            attackData.hitWindowDuration
         );
         effect.SetTargetTag(targetTag);
         

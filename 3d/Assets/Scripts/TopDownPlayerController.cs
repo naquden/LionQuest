@@ -717,12 +717,9 @@ public class TopDownPlayerController : MonoBehaviour
         Projectile projectile = projectileObj.GetComponent<Projectile>();
         if (projectile != null)
         {
-            // Get damage multiplier from combat controller if available
-            float damageMultiplier = 1f;
-            if (combatController != null)
-            {
-                // Use reflection or add a getter - for now use base damage
-            }
+            float damageMultiplier = combatController != null
+                ? combatController.GetDamageMultiplier()
+                : 1f;
             
             projectile.Initialize(
                 skillData.damage * damageMultiplier,

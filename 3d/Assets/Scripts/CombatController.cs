@@ -159,6 +159,11 @@ public class CombatController : MonoBehaviour
     {
         damageMultiplier = multiplier;
     }
+
+    public float GetDamageMultiplier()
+    {
+        return damageMultiplier;
+    }
     
     /// <summary>
     /// Set the attack point transform (where attacks originate from)

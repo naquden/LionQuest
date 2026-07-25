@@ -10,7 +10,7 @@ public class MapGenerator : MonoBehaviour
 {
     [Header("Map Settings")]
     [Tooltip("Size of the map in Unity units")]
-    [SerializeField] private Vector2Int mapSize = new Vector2Int(200, 200);
+    [SerializeField] private Vector2Int mapSize = new Vector2Int(160, 160);
     
     /// <summary>
     /// Gets the map size (public for boundary checking)
@@ -25,21 +25,53 @@ public class MapGenerator : MonoBehaviour
     
     [Header("Terrain Settings")]
     [Tooltip("Generate flat terrain (no height variation)")]
-    [SerializeField] private bool flatTerrain = true;
-    
+    [SerializeField] private bool flatTerrain = false;
+
+    [Tooltip("Stylized terrain material (LionQuest/StylizedTerrain). Assigned to the terrain at startup.")]
+    [SerializeField] private Material terrainMaterial;
+
+    [Tooltip("Amplitude of the rolling height noise, in world units")]
+    [SerializeField] private float heightAmplitude = 3.5f;
+
+    [Tooltip("World-space wavelength of the rolling height noise")]
+    [SerializeField] private float heightFrequency = 55f;
+
+    [Header("Water — the map is a single island surrounded by ocean")]
+    [Tooltip("Radius of the walkable island (grass/paths), centered on the map, in world units")]
+    [SerializeField] private float islandRadius = 40f;
+
+    [Tooltip("Depth of the ocean floor below island level, in world units. Must exceed heightAmplitude or the rolling terrain will poke through the water surface.")]
+    [SerializeField] private float oceanDepth = 6f;
+
+    [Tooltip("Water surface material (LionQuest/StylizedWater)")]
+    [SerializeField] private Material waterMaterial;
+
+    [Tooltip("Sand shoreline GroundType, painted in a ring around the island")]
+    [SerializeField] private GroundType sandGroundType;
+
+    [Tooltip("Width of the sandy shoreline ring, in world units")]
+    [SerializeField] private float beachWidth = 8f;
+
+    [Header("Details")]
+    [Tooltip("Grass and flower detail textures scattered on grass")]
+    [SerializeField] private List<Texture2D> detailTextures = new List<Texture2D>();
+
+    [Tooltip("Detail instances per detail-map cell on grass")]
+    [SerializeField] private int detailDensity = 6;
+
     [Header("Biome Generation")]
     [Tooltip("Ground types available for generation")]
     [SerializeField] private List<GroundType> availableGroundTypes = new List<GroundType>();
     
-    [Tooltip("Number of biome regions to generate")]
-    [SerializeField] private int biomeCount = 5;
-    
-    [Tooltip("Size variation of biomes")]
-    [SerializeField] private float biomeSizeVariation = 0.3f;
-    
-    [Tooltip("Blend distance between biomes")]
-    [SerializeField] private float biomeBlendDistance = 10f;
-    
+    [Tooltip("Number of winding dirt paths to paint")]
+    [SerializeField] private int pathCount = 3;
+
+    [Tooltip("Width of dirt paths, in world units")]
+    [SerializeField] private float pathWidth = 6f;
+
+    [Tooltip("Extra gather radius for splat blending — higher is softer biome transitions")]
+    [SerializeField] private int blendRadius = 3;
+
     [Header("Hole Generation")]
     [Tooltip("Number of holes to generate")]
     [SerializeField] private int holeCount = 10;
@@ -63,6 +95,12 @@ public class MapGenerator : MonoBehaviour
     // Runtime lookup for speed blending
     private Dictionary<int, float> layerIndexToSpeed = new Dictionary<int, float>();
     private Dictionary<int, bool> layerIndexToIsHole = new Dictionary<int, bool>();
+    private Dictionary<GroundType, int> groundTypeToLayerIndex = new Dictionary<GroundType, int>();
+
+    private Vector2 mapCenter;
+    private List<Transform> waterSurfaces = new List<Transform>();
+
+    private const string WaterSurfacePrefix = "WaterSurface_";
     
     private void Awake()
     {
@@ -94,45 +132,16 @@ public class MapGenerator : MonoBehaviour
             return;
         }
 
-        layerIndexToSpeed.Clear();
-        layerIndexToIsHole.Clear();
-
         if (terrainData.terrainLayers == null || terrainData.terrainLayers.Length == 0)
         {
             Debug.LogWarning("[MapGenerator] No terrain layers found on existing terrain!");
             return;
         }
 
-        Debug.Log($"[MapGenerator] Found {terrainData.terrainLayers.Length} terrain layers. Matching with {availableGroundTypes.Count} available GroundTypes...");
-
-        for (int i = 0; i < terrainData.terrainLayers.Length; i++)
-        {
-            TerrainLayer layer = terrainData.terrainLayers[i];
-            bool foundMatch = false;
-
-            foreach (var groundType in availableGroundTypes)
-            {
-                // Match by texture (Diffuse Texture is usually unique enough)
-                if (groundType.terrainTexture == layer.diffuseTexture)
-                {
-                    layerIndexToSpeed[i] = groundType.movementSpeedMultiplier;
-                    layerIndexToIsHole[i] = groundType.isHole;
-                    Debug.Log($"[MapGenerator] Matched Layer {i} ({layer.name}) to GroundType '{groundType.groundName}'. Speed: {groundType.movementSpeedMultiplier}, IsHole: {groundType.isHole}");
-                    foundMatch = true;
-                    break;
-                }
-            }
-
-            if (!foundMatch)
-            {
-                Debug.LogWarning($"[MapGenerator] Layer {i} ({layer.name}) has no matching GroundType in 'availableGroundTypes'. Defaulting to Speed=1, IsHole=False.");
-                layerIndexToSpeed[i] = 1f;
-                layerIndexToIsHole[i] = false;
-            }
-        }
-        
-        // Important: IsMapGenerated() checks terrain != null. 
-        // We consider the map "generated" for gameplay purposes if we have data, even if groundTypeMap is null.
+        // Rebuild the layers from availableGroundTypes so indices match what a generated map
+        // would produce. Matching existing layers by diffuse texture instead would mis-assign
+        // any two ground types that share a texture.
+        BuildTerrainLayers();
     }
 
     
@@ -159,7 +168,16 @@ public class MapGenerator : MonoBehaviour
             terrainData = new TerrainData();
             terrain.terrainData = terrainData;
         }
-        
+
+        if (terrainMaterial == null)
+        {
+            Debug.LogError("MapGenerator: terrainMaterial is not assigned! Run LionQuest/Generate/Terrain Content, then assign Assets/Shaders/StylizedTerrain.mat in the Inspector.");
+        }
+        else
+        {
+            terrain.materialTemplate = terrainMaterial;
+        }
+
         // Ensure TerrainCollider exists for physics collision
         TerrainCollider terrainCollider = GetComponent<TerrainCollider>();
         if (terrainCollider == null)
@@ -209,8 +227,10 @@ public class MapGenerator : MonoBehaviour
         // Get terrain resolutions
         terrainResolution = terrainData.heightmapResolution;
         alphamapResolution = terrainData.alphamapResolution;
-        
-        // Generate terrain heightmap (flat if enabled)
+
+        mapCenter = new Vector2(mapSize.x * 0.5f, mapSize.y * 0.5f);
+
+        // Generate terrain heightmap (flat if enabled) — the ocean basin is carved in here.
         if (flatTerrain)
         {
             GenerateFlatTerrain();
@@ -219,60 +239,260 @@ public class MapGenerator : MonoBehaviour
         {
             GenerateTerrainHeight();
         }
-        
-        // Generate biome map
+
+        // Generate biome map (island interior: grass + paths)
         GenerateBiomes();
-        
+
+        // Every pass that writes groundTypeMap must run BEFORE the alphamap is built,
+        // otherwise the alphamap-based queries (IsHoleAtPosition) can never see it.
+        PaintShorelineAndOcean();
+        GenerateHoles();
+
         // Apply textures to terrain
         ApplyTerrainTextures();
-        
-        // Generate holes
-        GenerateHoles();
-        
+
+        ApplyDetails();
+        SpawnOceanSurface();
+
         Debug.Log("MapGenerator: Map generation complete!");
     }
     
     /// <summary>
-    /// Generates flat terrain (no height variation)
+    /// Flat island plateau, still dropping to the ocean floor past islandRadius+beachWidth.
     /// </summary>
     private void GenerateFlatTerrain()
     {
         float[,] heights = new float[terrainResolution, terrainResolution];
-        
-        // Set all heights to 0 (flat ground at base level)
+        float baseline = (oceanDepth + heightAmplitude) / terrainHeight;
+
         for (int x = 0; x < terrainResolution; x++)
         {
             for (int y = 0; y < terrainResolution; y++)
             {
-                heights[x, y] = 0f;
+                float wx = (float)x / terrainResolution * mapSize.x;
+                float wy = (float)y / terrainResolution * mapSize.y;
+                heights[y, x] = Mathf.Clamp01(baseline - OceanDepressionAt(wx, wy) / terrainHeight);
             }
         }
-        
+
         terrainData.SetHeights(0, 0, heights);
     }
-    
+
     /// <summary>
-    /// Generates terrain height using Perlin noise (not used if flatTerrain is true)
+    /// Gentle rolling height from domain-warped multi-octave Perlin over a single central
+    /// island, dropping to the ocean floor past islandRadius+beachWidth.
+    /// Heights array is indexed [y, x]; groundTypeMap is [x, y].
     /// </summary>
     private void GenerateTerrainHeight()
     {
         float[,] heights = new float[terrainResolution, terrainResolution];
-        
+
+        // Baseline sits above 0 so the ocean basin has room to carve downward.
+        float baseline = (oceanDepth + heightAmplitude) / terrainHeight;
+        float freq = Mathf.Max(heightFrequency, 0.001f);
+
         for (int x = 0; x < terrainResolution; x++)
         {
             for (int y = 0; y < terrainResolution; y++)
             {
-                float xCoord = (float)x / terrainResolution * mapSize.x * 0.1f;
-                float yCoord = (float)y / terrainResolution * mapSize.y * 0.1f;
-                
-                float height = Mathf.PerlinNoise(xCoord, yCoord);
-                height = height * 10f / terrainHeight; // Normalize to terrain height
-                
-                heights[x, y] = height;
+                float wx = (float)x / terrainResolution * mapSize.x;
+                float wy = (float)y / terrainResolution * mapSize.y;
+
+                // Domain warp: offset the sample point by noise so ridges meander
+                // instead of forming the regular lattice plain Perlin produces.
+                float warpX = Mathf.PerlinNoise(wx / freq * 2.3f + 11.7f, wy / freq * 2.3f + 3.1f) - 0.5f;
+                float warpY = Mathf.PerlinNoise(wx / freq * 2.3f + 41.3f, wy / freq * 2.3f + 27.9f) - 0.5f;
+
+                float sx = (wx + warpX * freq * 0.6f) / freq;
+                float sy = (wy + warpY * freq * 0.6f) / freq;
+
+                float n = Mathf.PerlinNoise(sx, sy) * 0.6f
+                        + Mathf.PerlinNoise(sx * 2.1f, sy * 2.1f) * 0.3f
+                        + Mathf.PerlinNoise(sx * 4.3f, sy * 4.3f) * 0.1f;
+
+                float height = baseline + (n - 0.5f) * (heightAmplitude / terrainHeight);
+                heights[y, x] = Mathf.Clamp01(height - OceanDepressionAt(wx, wy) / terrainHeight);
             }
         }
-        
+
         terrainData.SetHeights(0, 0, heights);
+    }
+
+    /// <summary>
+    /// GenerateMap is reachable from the Inspector context menu, where Destroy() throws.
+    /// </summary>
+    private static void DestroySafely(Object target)
+    {
+        if (target == null) return;
+
+        if (Application.isPlaying) Destroy(target);
+        else DestroyImmediate(target);
+    }
+
+    /// <summary>
+    /// World Y of the ocean surface: below the lowest dry land, above the ocean floor.
+    /// </summary>
+    private float WaterSurfaceHeight()
+    {
+        float baseline = oceanDepth + heightAmplitude;
+        float lowestDryLand = baseline - heightAmplitude * 0.5f;
+        float oceanFloor = baseline - oceanDepth;
+
+        return Mathf.Lerp(oceanFloor, lowestDryLand, 0.75f);
+    }
+
+    /// <summary>
+    /// How far below ground level the ocean basin pulls the terrain at a world position.
+    /// Smoothstep falloff from the island edge out to the map border, so everything past
+    /// islandRadius+beachWidth is fully submerged well before the terrain boundary.
+    /// </summary>
+    private float OceanDepressionAt(float worldX, float worldZ)
+    {
+        float distance = Vector2.Distance(new Vector2(worldX, worldZ), mapCenter);
+        float shoreStart = islandRadius + beachWidth;
+
+        // Widest map edge distance from center, so the transition always finishes inside bounds.
+        float mapEdge = Mathf.Max(mapSize.x, mapSize.y) * 0.5f;
+        float falloffWidth = Mathf.Max(1f, mapEdge - shoreStart);
+
+        float t = Mathf.Clamp01((distance - shoreStart) / falloffWidth);
+        return oceanDepth * Mathf.SmoothStep(0f, 1f, t);
+    }
+
+    /// <summary>
+    /// Paints sand in a ring around the island edge, then ocean-floor GroundType (the hole
+    /// type, non-walkable) everywhere past the beach. Must run before ApplyTerrainTextures
+    /// so the alphamap picks it up.
+    /// </summary>
+    private void PaintShorelineAndOcean()
+    {
+        GroundType oceanFloorType = GetHoleGroundType();
+
+        for (int x = 0; x < terrainResolution; x++)
+        {
+            for (int y = 0; y < terrainResolution; y++)
+            {
+                float wx = (float)x / terrainResolution * mapSize.x;
+                float wy = (float)y / terrainResolution * mapSize.y;
+                float distance = Vector2.Distance(new Vector2(wx, wy), mapCenter);
+
+                if (distance > islandRadius + beachWidth)
+                {
+                    if (oceanFloorType != null) groundTypeMap[x, y] = oceanFloorType;
+                }
+                else if (distance > islandRadius && sandGroundType != null)
+                {
+                    groundTypeMap[x, y] = sandGroundType;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Spawns a single ocean plane covering the whole map at runtime. Runtime spawning
+    /// avoids editing the binary-serialized scene.
+    /// </summary>
+    private void SpawnOceanSurface()
+    {
+        if (waterMaterial == null)
+        {
+            Debug.LogError("MapGenerator: waterMaterial is not assigned! Run LionQuest/Generate/Terrain Content, then assign Assets/Shaders/StylizedWater.mat in the Inspector.");
+            return;
+        }
+
+        // Sweep by name, not just the tracked list — the list is empty after a domain reload
+        // but a surface from a previous generate may still be parented under the terrain.
+        for (int i = transform.childCount - 1; i >= 0; i--)
+        {
+            Transform child = transform.GetChild(i);
+            if (child.name.StartsWith(WaterSurfacePrefix)) DestroySafely(child.gameObject);
+        }
+        waterSurfaces.Clear();
+
+        // The rolling noise spans baseline +/- heightAmplitude/2, so the waterline must sit
+        // below the lowest dry land or the ocean visibly floods the island.
+        float waterY = WaterSurfaceHeight();
+
+        GameObject surface = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        surface.name = $"{WaterSurfacePrefix}0";
+        surface.transform.SetParent(transform, false);
+        surface.transform.position = new Vector3(mapCenter.x, waterY, mapCenter.y);
+        surface.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+        // Oversize past the map bounds so there's no visible seam at the terrain edge.
+        float span = Mathf.Max(mapSize.x, mapSize.y) * 1.4f;
+        surface.transform.localScale = new Vector3(span, span, 1f);
+
+        DestroySafely(surface.GetComponent<Collider>());
+        surface.GetComponent<MeshRenderer>().sharedMaterial = waterMaterial;
+
+        waterSurfaces.Add(surface.transform);
+    }
+
+    /// <summary>
+    /// Scatters grass and flower details, dense on grass and absent on sand, holes and water.
+    /// </summary>
+    private void ApplyDetails()
+    {
+        if (detailTextures == null || detailTextures.Count == 0) return;
+
+        List<DetailPrototype> prototypes = new List<DetailPrototype>();
+        foreach (var texture in detailTextures)
+        {
+            if (texture == null) continue;
+
+            prototypes.Add(new DetailPrototype
+            {
+                prototypeTexture = texture,
+                renderMode = DetailRenderMode.GrassBillboard,
+                usePrototypeMesh = false,
+                healthyColor = Color.white,
+                dryColor = new Color(0.85f, 0.82f, 0.55f),
+                minWidth = 0.6f,
+                maxWidth = 1.3f,
+                minHeight = 0.5f,
+                maxHeight = 1.1f,
+                noiseSpread = 0.3f
+            });
+        }
+
+        if (prototypes.Count == 0) return;
+
+        terrainData.detailPrototypes = prototypes.ToArray();
+        terrainData.SetDetailResolution(512, 16);
+        terrainData.wavingGrassStrength = 0.35f;
+        terrainData.wavingGrassSpeed = 0.4f;
+        terrainData.wavingGrassAmount = 0.35f;
+        terrainData.wavingGrassTint = new Color(0.8f, 0.85f, 0.7f);
+
+        int detailRes = terrainData.detailResolution;
+
+        for (int layer = 0; layer < prototypes.Count; layer++)
+        {
+            int[,] map = new int[detailRes, detailRes];
+
+            for (int x = 0; x < detailRes; x++)
+            {
+                for (int y = 0; y < detailRes; y++)
+                {
+                    int hx = Mathf.Clamp(Mathf.RoundToInt((float)x / detailRes * terrainResolution), 0, terrainResolution - 1);
+                    int hy = Mathf.Clamp(Mathf.RoundToInt((float)y / detailRes * terrainResolution), 0, terrainResolution - 1);
+
+                    GroundType type = groundTypeMap[hx, hy];
+                    if (type == null || type.isHole || type == sandGroundType) continue;
+
+                    // Break the scatter into clumps rather than a uniform carpet.
+                    float clump = Mathf.PerlinNoise(x * 0.05f + layer * 13.3f, y * 0.05f + layer * 7.1f);
+                    if (clump < 0.45f) continue;
+
+                    map[y, x] = Random.Range(0, Mathf.Max(1, detailDensity));
+                }
+            }
+
+            terrainData.SetDetailLayer(0, 0, layer, map);
+        }
+
+        Debug.Log($"MapGenerator: Applied {prototypes.Count} detail prototypes.");
     }
     
     /// <summary>
@@ -281,124 +501,110 @@ public class MapGenerator : MonoBehaviour
     private void GenerateBiomes()
     {
         groundTypeMap = new GroundType[terrainResolution, terrainResolution];
-        
-        // Create biome centers
-        List<BiomeCenter> biomeCenters = new List<BiomeCenter>();
-        
-        for (int i = 0; i < biomeCount; i++)
+
+        GroundType baseType = GetBaseGroundType();
+        if (baseType == null)
         {
-            // Select a random ground type (excluding holes - those are generated separately)
-            GroundType groundType = GetRandomWalkableGroundType();
-            if (groundType == null) continue;
-            
-            // Random position
-            Vector2 center = new Vector2(
-                Random.Range(mapSize.x * 0.2f, mapSize.x * 0.8f),
-                Random.Range(mapSize.y * 0.2f, mapSize.y * 0.8f)
-            );
-            
-            // Random size
-            float size = Random.Range(
-                Mathf.Min(mapSize.x, mapSize.y) * 0.1f,
-                Mathf.Min(mapSize.x, mapSize.y) * 0.3f
-            );
-            size *= (1f + Random.Range(-biomeSizeVariation, biomeSizeVariation));
-            
-            biomeCenters.Add(new BiomeCenter
-            {
-                center = center,
-                size = size,
-                groundType = groundType
-            });
-            
-            Debug.Log($"Biome {i}: Type={groundType.groundName}, Center=({center.x:F1}, {center.y:F1}), Size={size:F1}");
+            Debug.LogError("MapGenerator: No walkable base ground type available!");
+            return;
         }
-        
-        // Fill ground type map based on biome centers
+
         for (int x = 0; x < terrainResolution; x++)
         {
             for (int y = 0; y < terrainResolution; y++)
             {
-                // Convert array coordinates to world position
-                // x and y are array indices, convert to world coordinates
-                Vector2 worldPos = new Vector2(
-                    ((float)x / terrainResolution) * mapSize.x,
-                    ((float)y / terrainResolution) * mapSize.y
-                );
-                
-                GroundType closestType = GetClosestBiomeType(worldPos, biomeCenters);
-                groundTypeMap[x, y] = closestType;
+                groundTypeMap[x, y] = baseType;
             }
         }
-        
-        Debug.Log($"MapGenerator: Generated {biomeCenters.Count} biomes. Ground type map size: {terrainResolution}x{terrainResolution}");
+
+        PaintPaths();
+
+        Debug.Log($"MapGenerator: Base ground '{baseType.groundName}' + {pathCount} paths. Ground type map size: {terrainResolution}x{terrainResolution}");
     }
-    
+
     /// <summary>
-    /// Gets the ground type at the closest biome center, with blending
+    /// Paints winding dirt paths as Catmull-Rom splines through random waypoints.
+    /// Reads as a deliberate route rather than the random blobs this replaced.
     /// </summary>
-    private GroundType GetClosestBiomeType(Vector2 position, List<BiomeCenter> biomeCenters)
+    private void PaintPaths()
     {
-        if (biomeCenters.Count == 0)
+        GroundType pathType = GetPathGroundType();
+        if (pathType == null) return;
+
+        for (int p = 0; p < pathCount; p++)
         {
-            return availableGroundTypes.Count > 0 ? availableGroundTypes[0] : null; // Default to first ground type
-        }
-        
-        float minDistance = float.MaxValue;
-        GroundType closestType = biomeCenters[0].groundType;
-        
-        // Find closest biome based on distance from center
-        foreach (var biome in biomeCenters)
-        {
-            float distance = Vector2.Distance(position, biome.center);
-            
-            // Check if position is within this biome's radius
-            if (distance <= biome.size)
+            List<Vector2> waypoints = new List<Vector2>();
+
+            // Cross the map edge-to-edge so paths read as routes, not stubs.
+            bool horizontal = Random.value < 0.5f;
+            int segments = Random.Range(4, 7);
+
+            for (int i = 0; i <= segments; i++)
             {
-                // Position is within this biome, use it
-                return biome.groundType;
+                float t = (float)i / segments;
+                float along = Mathf.Lerp(-0.1f, 1.1f, t);
+                float across = Random.Range(0.2f, 0.8f);
+
+                waypoints.Add(horizontal
+                    ? new Vector2(along * mapSize.x, across * mapSize.y)
+                    : new Vector2(across * mapSize.x, along * mapSize.y));
             }
-            
-            // Track closest biome for positions outside all biomes
-            if (distance < minDistance)
+
+            // Duplicate the ends so Catmull-Rom has control points for the first/last span.
+            waypoints.Insert(0, waypoints[0]);
+            waypoints.Add(waypoints[waypoints.Count - 1]);
+
+            float halfWidth = pathWidth * 0.5f;
+            int steps = terrainResolution * 2;
+
+            for (int s = 0; s <= steps; s++)
             {
-                minDistance = distance;
-                closestType = biome.groundType;
-            }
-        }
-        
-        // If we're outside all biomes, use the closest one
-        // Check if we're in blend zone between biomes
-        if (biomeBlendDistance > 0)
-        {
-            List<BiomeCenter> nearbyBiomes = new List<BiomeCenter>();
-            foreach (var biome in biomeCenters)
-            {
-                float distance = Vector2.Distance(position, biome.center);
-                if (distance <= biome.size + biomeBlendDistance)
-                {
-                    nearbyBiomes.Add(biome);
-                }
-            }
-            
-            if (nearbyBiomes.Count > 1)
-            {
-                // Blend between nearby biomes (simple: use closest)
-                // Could be enhanced with weighted blending
-                float closestDist = float.MaxValue;
-                foreach (var biome in nearbyBiomes)
-                {
-                    float dist = Vector2.Distance(position, biome.center);
-                    if (dist < closestDist)
-                    {
-                        closestDist = dist;
-                        closestType = biome.groundType;
-                    }
-                }
+                float u = (float)s / steps * (waypoints.Count - 3);
+                int seg = Mathf.Clamp(Mathf.FloorToInt(u), 0, waypoints.Count - 4);
+                float local = u - seg;
+
+                Vector2 point = CatmullRom(waypoints[seg], waypoints[seg + 1], waypoints[seg + 2], waypoints[seg + 3], local);
+                StampCircle(point, halfWidth, pathType);
             }
         }
-        
-        return closestType;
+    }
+
+    private static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+    {
+        float t2 = t * t;
+        float t3 = t2 * t;
+
+        return 0.5f * ((2f * p1)
+            + (-p0 + p2) * t
+            + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2
+            + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+    }
+
+    /// <summary>
+    /// Stamps a filled circle of a ground type into groundTypeMap at a world position.
+    /// </summary>
+    private void StampCircle(Vector2 worldCenter, float worldRadius, GroundType type)
+    {
+        float cellsPerUnitX = (float)terrainResolution / mapSize.x;
+        float cellsPerUnitY = (float)terrainResolution / mapSize.y;
+
+        int cx = Mathf.RoundToInt(worldCenter.x * cellsPerUnitX);
+        int cy = Mathf.RoundToInt(worldCenter.y * cellsPerUnitY);
+        int rx = Mathf.Max(1, Mathf.RoundToInt(worldRadius * cellsPerUnitX));
+        int ry = Mathf.Max(1, Mathf.RoundToInt(worldRadius * cellsPerUnitY));
+
+        for (int dx = -rx; dx <= rx; dx++)
+        {
+            for (int dy = -ry; dy <= ry; dy++)
+            {
+                int nx = cx + dx;
+                int ny = cy + dy;
+                if (nx < 0 || nx >= terrainResolution || ny < 0 || ny >= terrainResolution) continue;
+
+                float ellipse = (float)(dx * dx) / (rx * rx) + (float)(dy * dy) / (ry * ry);
+                if (ellipse <= 1f) groundTypeMap[nx, ny] = type;
+            }
+        }
     }
     
     /// <summary>
@@ -413,16 +619,20 @@ public class MapGenerator : MonoBehaviour
             return;
         }
         
+        // Read the whole heightmap once, mutate locally, write once — a per-pixel
+        // GetHeights/SetHeights round-trip inside the loop is orders of magnitude slower.
+        float[,] heights = terrainData.GetHeights(0, 0, terrainResolution, terrainResolution);
+
         for (int i = 0; i < holeCount; i++)
         {
             // Random position
             int x = Random.Range(terrainResolution / 4, terrainResolution * 3 / 4);
             int y = Random.Range(terrainResolution / 4, terrainResolution * 3 / 4);
-            
+
             // Random size
             float holeSize = Random.Range(minHoleSize, maxHoleSize);
             int holeRadius = Mathf.RoundToInt(holeSize * terrainResolution / mapSize.x);
-            
+
             // Create circular hole
             for (int dx = -holeRadius; dx <= holeRadius; dx++)
             {
@@ -430,86 +640,75 @@ public class MapGenerator : MonoBehaviour
                 {
                     int nx = x + dx;
                     int ny = y + dy;
-                    
+
                     if (nx >= 0 && nx < terrainResolution && ny >= 0 && ny < terrainResolution)
                     {
                         float distance = Mathf.Sqrt(dx * dx + dy * dy);
                         if (distance <= holeRadius)
                         {
                             groundTypeMap[nx, ny] = holeType;
-                            
-                            // Also lower the terrain height at hole location
-                            float[,] heights = terrainData.GetHeights(nx, ny, 1, 1);
-                            heights[0, 0] = 0f; // Set to ground level (or below for holes)
-                            terrainData.SetHeights(nx, ny, heights);
+
+                            // Unity's heights array is indexed [y, x], groundTypeMap is [x, y].
+                            heights[ny, nx] = 0f;
                         }
                     }
                 }
             }
         }
+
+        terrainData.SetHeights(0, 0, heights);
     }
     
+    /// <summary>
+    /// Creates one terrain layer per configured GroundType, in inspector order.
+    /// Layer indices must stay stable across runs — shader and detail-density code keys off them.
+    /// </summary>
+    private void BuildTerrainLayers()
+    {
+        layerIndexToSpeed.Clear();
+        layerIndexToIsHole.Clear();
+        groundTypeToLayerIndex.Clear();
+
+        List<TerrainLayer> layers = new List<TerrainLayer>();
+
+        foreach (var groundType in availableGroundTypes)
+        {
+            if (groundType == null || groundType.terrainTexture == null) continue;
+            if (groundTypeToLayerIndex.ContainsKey(groundType)) continue;
+
+            int index = layers.Count;
+
+            TerrainLayer layer = new TerrainLayer();
+            layer.name = groundType.groundName;
+            layer.diffuseTexture = groundType.terrainTexture;
+            layer.normalMapTexture = groundType.normalMap;
+            layer.tileSize = groundType.textureTiling;
+            layers.Add(layer);
+
+            groundTypeToLayerIndex[groundType] = index;
+            layerIndexToSpeed[index] = groundType.movementSpeedMultiplier;
+            layerIndexToIsHole[index] = groundType.isHole;
+        }
+
+        terrainData.terrainLayers = layers.ToArray();
+
+        Debug.Log($"MapGenerator: Built {layers.Count} terrain layers from {availableGroundTypes.Count} ground types.");
+    }
+
     /// <summary>
     /// Applies terrain textures based on ground type map
     /// </summary>
     private void ApplyTerrainTextures()
     {
-        layerIndexToSpeed.Clear();
-        layerIndexToIsHole.Clear();
+        BuildTerrainLayers();
 
-        // Get unique ground types (only those with textures)
-        List<GroundType> typesWithTextures = new List<GroundType>();
-        HashSet<GroundType> uniqueTypes = new HashSet<GroundType>();
-        
-        for (int x = 0; x < terrainResolution; x++)
-        {
-            for (int y = 0; y < terrainResolution; y++)
-            {
-                if (groundTypeMap[x, y] != null && groundTypeMap[x, y].terrainTexture != null)
-                {
-                    uniqueTypes.Add(groundTypeMap[x, y]);
-                }
-            }
-        }
-        
-        if (uniqueTypes.Count == 0)
-        {
-            Debug.LogWarning("MapGenerator: No ground types with textures found. Skipping texture application.");
-            return;
-        }
-        
-        // Create terrain layers
-        TerrainLayer[] terrainLayers = new TerrainLayer[uniqueTypes.Count];
-        int layerIndex = 0;
-        Dictionary<GroundType, int> groundTypeToLayerIndex = new Dictionary<GroundType, int>();
-        
-        foreach (var groundType in uniqueTypes)
-        {
-            if (groundType.terrainTexture != null)
-            {
-                TerrainLayer layer = new TerrainLayer();
-                layer.diffuseTexture = groundType.terrainTexture;
-                layer.normalMapTexture = groundType.normalMap;
-                layer.tileSize = groundType.textureTiling;
-                terrainLayers[layerIndex] = layer;
-                groundTypeToLayerIndex[groundType] = layerIndex;
-                
-                // Cache properties for runtime lookup
-                layerIndexToSpeed[layerIndex] = groundType.movementSpeedMultiplier;
-                layerIndexToIsHole[layerIndex] = groundType.isHole;
-
-                layerIndex++;
-            }
-        }
-        
-        // Ensure we have at least one layer
-        if (terrainLayers.Length == 0)
+        if (terrainData.terrainLayers.Length == 0)
         {
             Debug.LogWarning("MapGenerator: No valid terrain layers created. Skipping texture application.");
             return;
         }
-        
-        terrainData.terrainLayers = terrainLayers;
+
+        TerrainLayer[] terrainLayers = terrainData.terrainLayers;
         
         // Create alpha map (texture blending) - use alphamap resolution, not heightmap resolution
         float[,,] alphaMap = new float[alphamapResolution, alphamapResolution, terrainLayers.Length];
@@ -526,77 +725,59 @@ public class MapGenerator : MonoBehaviour
             }
         }
         
-        // Map ground types to alpha map
+        // Weighted splat: each alphamap cell gathers a neighbourhood of ground-type cells with
+        // a distance falloff, so transitions come out soft. Replaces the old one-hot write plus
+        // box blur, which could only ever produce a hard edge smeared by a fixed 2px radius.
+        int gather = Mathf.Max(1, Mathf.RoundToInt((float)terrainResolution / alphamapResolution) + blendRadius);
+
         for (int x = 0; x < alphamapResolution; x++)
         {
             for (int y = 0; y < alphamapResolution; y++)
             {
-                // Convert alphamap coordinates to heightmap coordinates
-                int heightmapX = Mathf.RoundToInt((float)x / alphamapResolution * terrainResolution);
-                int heightmapY = Mathf.RoundToInt((float)y / alphamapResolution * terrainResolution);
-                
-                heightmapX = Mathf.Clamp(heightmapX, 0, terrainResolution - 1);
-                heightmapY = Mathf.Clamp(heightmapY, 0, terrainResolution - 1);
-                
-                GroundType type = groundTypeMap[heightmapX, heightmapY];
-                if (type != null && groundTypeToLayerIndex.ContainsKey(type))
+                int centerX = Mathf.Clamp(Mathf.RoundToInt((float)x / alphamapResolution * terrainResolution), 0, terrainResolution - 1);
+                int centerY = Mathf.Clamp(Mathf.RoundToInt((float)y / alphamapResolution * terrainResolution), 0, terrainResolution - 1);
+
+                float total = 0f;
+
+                for (int dx = -gather; dx <= gather; dx++)
                 {
-                    int targetLayerIndex = groundTypeToLayerIndex[type];
-                    alphaMap[x, y, targetLayerIndex] = 1f;
+                    for (int dy = -gather; dy <= gather; dy++)
+                    {
+                        int nx = centerX + dx;
+                        int ny = centerY + dy;
+                        if (nx < 0 || nx >= terrainResolution || ny < 0 || ny >= terrainResolution) continue;
+
+                        float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                        if (distance > gather) continue;
+
+                        GroundType type = groundTypeMap[nx, ny];
+                        if (type == null || !groundTypeToLayerIndex.TryGetValue(type, out int layerIndex)) continue;
+
+                        float weight = 1f - distance / (gather + 1f);
+                        weight *= weight;
+
+                        alphaMap[x, y, layerIndex] += weight;
+                        total += weight;
+                    }
                 }
-                else if (terrainLayers.Length > 0)
+
+                if (total > 0f)
                 {
-                    // Default to first layer if no type found
+                    for (int layer = 0; layer < terrainLayers.Length; layer++)
+                    {
+                        alphaMap[x, y, layer] /= total;
+                    }
+                }
+                else
+                {
                     alphaMap[x, y, 0] = 1f;
                 }
             }
         }
-        
-        // Smooth the boundaries
-        alphaMap = SmoothAlphaMap(alphaMap);
 
         terrainData.SetAlphamaps(0, 0, alphaMap);
     }
 
-    private float[,,] SmoothAlphaMap(float[,,] originalMap)
-    {
-        int width = originalMap.GetLength(0);
-        int height = originalMap.GetLength(1);
-        int layers = originalMap.GetLength(2);
-        
-        float[,,] smoothMap = new float[width, height, layers];
-        int radius = 2; // Blur radius (increase for smoother transitions)
-
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int l = 0; l < layers; l++)
-                {
-                    float sum = 0;
-                    int count = 0;
-                    
-                    for (int dx = -radius; dx <= radius; dx++)
-                    {
-                        for (int dy = -radius; dy <= radius; dy++)
-                        {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height)
-                            {
-                                sum += originalMap[nx, ny, l];
-                                count++;
-                            }
-                        }
-                    }
-                    smoothMap[x, y, l] = sum / count;
-                }
-            }
-        }
-        return smoothMap;
-    }
-    
     /// <summary>
     /// Checks if the map has been generated or successfully loaded
     /// </summary>
@@ -647,18 +828,11 @@ public class MapGenerator : MonoBehaviour
                 {
                     weightedSpeed += speed * weight;
                     totalWeight += weight;
-                    Debug.Log($"[MapGen] Layer {i}: Weight={weight:F2}, Speed={speed:F2}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[MapGen] Layer {i} has weight {weight:F2} but no speed in lookup! (Did you regenerate map?)");
                 }
             }
         }
-        
-        float finalSpeed = totalWeight > 0.01f ? weightedSpeed / totalWeight : 1f;
-        Debug.Log($"[MapGen] Final Smoothed Speed: {finalSpeed:F2}");
-        return finalSpeed;
+
+        return totalWeight > 0.01f ? weightedSpeed / totalWeight : 1f;
     }
 
     /// <summary>
@@ -738,26 +912,41 @@ public class MapGenerator : MonoBehaviour
         return groundType;
     }
     
-    private GroundType GetRandomWalkableGroundType()
+    /// <summary>
+    /// The dominant surface everything else is painted over — fastest walkable type.
+    /// </summary>
+    private GroundType GetBaseGroundType()
     {
-        List<GroundType> walkableTypes = availableGroundTypes.FindAll(gt => gt != null && gt.isWalkable && !gt.isHole);
-        if (walkableTypes.Count == 0)
+        GroundType best = null;
+        foreach (var type in availableGroundTypes)
         {
-            return availableGroundTypes.Count > 0 ? availableGroundTypes[0] : null;
+            if (type == null || type.isHole || !type.isWalkable) continue;
+            if (type == sandGroundType) continue;
+            if (best == null || type.movementSpeedMultiplier > best.movementSpeedMultiplier) best = type;
         }
-        return walkableTypes[Random.Range(0, walkableTypes.Count)];
+        return best;
+    }
+
+    /// <summary>
+    /// Path surface — slowest walkable type that isn't the base or the shoreline sand.
+    /// </summary>
+    private GroundType GetPathGroundType()
+    {
+        GroundType baseType = GetBaseGroundType();
+        GroundType best = null;
+
+        foreach (var type in availableGroundTypes)
+        {
+            if (type == null || type.isHole || !type.isWalkable) continue;
+            if (type == baseType || type == sandGroundType) continue;
+            if (best == null || type.movementSpeedMultiplier < best.movementSpeedMultiplier) best = type;
+        }
+        return best;
     }
     
     private GroundType GetHoleGroundType()
     {
         return availableGroundTypes.Find(gt => gt != null && gt.isHole);
-    }
-    
-    private struct BiomeCenter
-    {
-        public Vector2 center;
-        public float size;
-        public GroundType groundType;
     }
 }
 

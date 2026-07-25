@@ -46,4 +46,15 @@ echo ""
 # Surface the decisive lines so the agent sees pass/fail without reading the full log
 grep -E "AGENT_BATCH_(OK|FAIL)|\): error CS[0-9]+|error CS[0-9]+:|Compilation failed|CompilerMessage" "$LOG" 2>/dev/null || true
 
+# Unity can exit 0 without ever reaching the -executeMethod (e.g. licensing failure leaves
+# module assemblies unloaded, so every script fails to compile). Require the sentinel.
+if ! grep -q "AGENT_BATCH_OK" "$LOG" 2>/dev/null; then
+    echo ""
+    echo "ERROR: no AGENT_BATCH_OK sentinel in $LOG — the method never ran."
+    if grep -q "Licensing::Module. Error" "$LOG" 2>/dev/null; then
+        echo "Cause: Unity licensing client failed. Open the editor once to refresh the license, then retry."
+    fi
+    exit 1
+fi
+
 exit $CODE

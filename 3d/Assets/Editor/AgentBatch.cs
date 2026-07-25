@@ -51,6 +51,12 @@ public static class AgentBatch
                 case "UpgradeScreen":
                     InvokeGeneratorMenu("LionQuest/Generate/Upgrade Screen");
                     break;
+                case "TerrainContent":
+                    InvokeGeneratorMenu("LionQuest/Generate/Terrain Content");
+                    break;
+                case "GenerateMap":
+                    RunMapGenerator();
+                    break;
                 default:
                     // Try as a full menu path
                     InvokeGeneratorMenu(target);
@@ -112,6 +118,74 @@ public static class AgentBatch
             Debug.Log($"DIAG|scene={path} loadable={(main != null)}");
         }
         Report(OK, "diagnose done");
+    }
+
+    public static void DiagnoseMapGenerator()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        MapGenerator generator = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            generator = root.GetComponentInChildren<MapGenerator>(true);
+            if (generator != null) break;
+        }
+
+        if (generator == null)
+        {
+            Report(FAIL, "no MapGenerator found");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        var so = new SerializedObject(generator);
+        string[] fields = { "mapSize", "terrainHeight", "flatTerrain", "heightAmplitude", "heightFrequency",
+            "islandRadius", "oceanDepth", "beachWidth", "pathCount", "pathWidth",
+            "holeCount", "minHoleSize", "maxHoleSize" };
+        foreach (var f in fields)
+        {
+            var p = so.FindProperty(f);
+            Debug.Log($"DIAG|{f}={(p != null ? PropVal(p) : "MISSING")}");
+        }
+
+        Report(OK, "diagnose mapgen done");
+    }
+
+    static string PropVal(SerializedProperty p)
+    {
+        switch (p.propertyType)
+        {
+            case SerializedPropertyType.Vector2: return p.vector2Value.ToString();
+            case SerializedPropertyType.Vector2Int: return p.vector2IntValue.ToString();
+            case SerializedPropertyType.Float: return p.floatValue.ToString("F2");
+            case SerializedPropertyType.Integer: return p.intValue.ToString();
+            case SerializedPropertyType.Boolean: return p.boolValue.ToString();
+            default: return p.propertyType.ToString();
+        }
+    }
+
+    static void RunMapGenerator()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        MapGenerator generator = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            generator = root.GetComponentInChildren<MapGenerator>(true);
+            if (generator != null) break;
+        }
+
+        if (generator == null)
+            throw new Exception($"No MapGenerator found in {scenePath}");
+
+        generator.GenerateMap();
+
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+        UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
     }
 
     static void InvokeGeneratorMenu(string menuPath)

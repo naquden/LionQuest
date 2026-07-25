@@ -10,12 +10,73 @@ Players earn **souls** by killing enemies, spend them to upgrade stats. Each cha
 
 ## Build & Run
 
-No CLI build/test loop — this is a Unity project opened in the editor.
-
 - Open the project: Unity Hub → open `3d/` with editor `6000.3.2f1`.
 - Play: press Play in the editor.
 - Tests: Unity Test Runner (`Window → General → Test Runner`) — `com.unity.test-framework` is installed, but no test assemblies exist yet.
-- Code generators: run from the editor menu `LionQuest/Generate/...` (planned per-feature editor scripts in `Assets/Editor/`).
+- Code generators: run from the editor menu `LionQuest/Generate/...` (editor scripts in `Assets/Editor/`).
+
+## Agent Automation
+
+Three lanes for agent-driven work. Choose by task type:
+
+| Task | Lane |
+|---|---|
+| Scalar/data tuning in existing `.asset` (e.g. `damage:`, `cooldown:`) | **Direct YAML edit** — no Unity launch |
+| Structural: new scene/prefab/SO, ref wiring, run a generator | **Batch CLI headless** |
+| Fast interactive iteration with editor open | **MCP bridge** (Tools > Agent Bridge/Start) |
+
+### Lane 1 — Batch CLI headless
+
+```sh
+# Compile gate (run after any script edit)
+sh tools/unity-batch.sh Compile
+
+# Run a named generator
+sh tools/unity-batch.sh RunGenerator StartScreen
+sh tools/unity-batch.sh RunGenerator CharacterSelection
+sh tools/unity-batch.sh RunGenerator UpgradeScreen
+
+# Run any menu item by path
+sh tools/unity-batch.sh RunGeneratorByMenuPath "LionQuest/Generate/Start Screen"
+
+# Print editor facts not visible on disk (serialization mode, scene loadability)
+sh tools/unity-batch.sh Diagnose
+```
+
+Batch mode needs the sandbox disabled — Unity writes to `Library/`, editor prefs, and a licensing mutex outside sandbox-allowed paths. Expected, not a bug.
+
+**Sentinel lines** grep'd to stdout: `AGENT_BATCH_OK|...` (success) or `AGENT_BATCH_FAIL|...` (failure). Compile errors surface as `): error CS####`. Exit code 0 = OK, 1 = failure.
+
+**Lock caveat**: batch fails if the Unity editor is open (`Temp/UnityLockfile` exists). The script detects this and prints a clear error. Close editor first, or use the MCP bridge.
+
+### Lane 2 — MCP bridge (interactive)
+
+With the editor open: `Tools > Agent Bridge > Start` → listens on `127.0.0.1:7891`.
+
+Commands (newline-terminated, via `nc` or `socat`):
+```
+ping                            → pong
+compile                         → OK|compile refresh triggered
+menu LionQuest/Generate/...     → OK|menu executed
+play                            → OK|entering play mode
+stop                            → OK|stopping play mode
+```
+
+Example: `echo "menu LionQuest/Generate/Start Screen" | nc 127.0.0.1 7891`
+
+### Known constraint — `SampleScene.unity` is binary
+
+`EditorSettings.serializationMode` is `ForceText` and all prefabs/`.asset` files are YAML, but `Assets/Scenes/SampleScene.unity` predates that setting and is still **binary**. Agents cannot read or diff it, and git treats it as an opaque blob (no reviewable diffs, unresolvable merge conflicts). Neither `EditorSceneManager.SaveScene` nor `AssetDatabase.ForceReserializeAssets` converts it — both write back in the file's existing format, even when saving to a fresh path. Converting it likely needs the GUI (`Edit > Project Settings > Editor`, re-apply Force Text, then open+save the scene in the editor).
+
+Until it is converted: scene changes to `SampleScene` must go through a generator that edits it via the Unity API (`EditorSceneManager`) — never by text manipulation. Expect its diffs to be unreviewable.
+
+### Lane 3 — Direct YAML data edits
+
+Agents may edit **scalar values** in existing `.asset`/`.prefab` YAML directly (single numbers/bools/strings). Do NOT hand-edit structural YAML (adding components, wiring `{fileID, guid, type}` refs, creating objects) — use a generator (Lane 1). After a scalar edit, run `sh tools/unity-batch.sh Compile` if the file could affect import; pure data scalars need no relaunch.
+
+### Generator convention
+
+Every generator in `Assets/Editor/` exposes **both** a `[MenuItem("LionQuest/Generate/...")]` (for human menu click) and a `public static void Generate()` (for `AgentBatch.RunGenerator` to call directly). This dual-entry pattern is required for all generators.
 
 ## Key Packages
 

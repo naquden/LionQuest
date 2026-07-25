@@ -1,0 +1,49 @@
+#!/bin/sh
+# unity-batch.sh — headless Unity launcher for agent automation
+#
+# Usage:
+#   sh tools/unity-batch.sh Compile
+#   sh tools/unity-batch.sh RunGenerator StartScreen
+#   sh tools/unity-batch.sh RunGeneratorByMenuPath "LionQuest/Generate/Start Screen"
+#
+# Exit 0 = success (AGENT_BATCH_OK in log)
+# Exit 1 = failure (AGENT_BATCH_FAIL or compile errors in log)
+
+UNITY="/Applications/Unity/Hub/Editor/6000.3.2f1/Unity.app/Contents/MacOS/Unity"
+PROJ="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="$PROJ/Logs/agent-batch.log"
+METHOD="${1:?usage: unity-batch.sh <Method> [AGENT_GEN]}"
+export AGENT_GEN="${2:-}"
+
+# Detect editor lockfile — but only treat it as "editor open" if a process
+# actually holds it (a prior aborted batch run can leave a stale lockfile).
+LOCKFILE="$PROJ/Temp/UnityLockfile"
+if [ -f "$LOCKFILE" ] && lsof "$LOCKFILE" >/dev/null 2>&1; then
+    echo "ERROR: Unity editor is open (lockfile held: $LOCKFILE)"
+    echo "Close the editor first, or use the MCP bridge for interactive iteration."
+    exit 1
+fi
+
+# Ensure Logs/ exists (gitignored but may not exist on fresh clone)
+mkdir -p "$(dirname "$LOG")"
+: > "$LOG"
+
+echo "Running AgentBatch.$METHOD (AGENT_GEN='$AGENT_GEN') ..."
+
+"$UNITY" \
+    -batchmode \
+    -nographics \
+    -quit \
+    -projectPath "$PROJ" \
+    -executeMethod "AgentBatch.$METHOD" \
+    -logFile "$LOG"
+CODE=$?
+
+echo ""
+echo "---- exit $CODE ----"
+echo ""
+
+# Surface the decisive lines so the agent sees pass/fail without reading the full log
+grep -E "AGENT_BATCH_(OK|FAIL)|\): error CS[0-9]+|error CS[0-9]+:|Compilation failed|CompilerMessage" "$LOG" 2>/dev/null || true
+
+exit $CODE

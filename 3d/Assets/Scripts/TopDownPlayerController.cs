@@ -92,6 +92,7 @@ public class TopDownPlayerController : MonoBehaviour
     public bool IsAlive => currentHealth > 0f;
     
     private Rigidbody rb;
+    private PlayerInput playerInput;
     private InputAction moveAction;
     private InputAction sprintAction;
     private InputAction attackAction;
@@ -150,8 +151,19 @@ public class TopDownPlayerController : MonoBehaviour
         position.y = groundLevel;
         transform.position = position;
         
-        // Enable input actions
-        if (inputActions != null)
+        // Per-instance PlayerInput (multi-player local co-op) takes priority over the shared asset.
+        playerInput = GetComponent<PlayerInput>();
+
+        if (playerInput != null)
+        {
+            moveAction = playerInput.actions["Player/Move"];
+            sprintAction = playerInput.actions["Player/Sprint"];
+            attackAction = playerInput.actions["Player/Attack"];
+            skill1Action = playerInput.actions["Player/Skill1"];
+            skill2Action = playerInput.actions["Player/Skill2"];
+            skill3Action = playerInput.actions["Player/Skill3"];
+        }
+        else if (inputActions != null)
         {
             inputActions.Enable();
             moveAction = inputActions.FindAction("Player/Move");
@@ -160,7 +172,7 @@ public class TopDownPlayerController : MonoBehaviour
             skill1Action = inputActions.FindAction("Player/Skill1");
             skill2Action = inputActions.FindAction("Player/Skill2");
             skill3Action = inputActions.FindAction("Player/Skill3");
-            
+
             if (moveAction == null)
             {
                 Debug.LogError($"TopDownPlayerController: Could not find 'Player/Move' action in InputActions asset '{inputActions.name}'. Please check the action map and action names.");
@@ -342,15 +354,16 @@ public class TopDownPlayerController : MonoBehaviour
     
     private void OnEnable()
     {
-        if (inputActions != null)
+        // PlayerInput manages its own action map lifecycle; only the shared-asset fallback needs this.
+        if (playerInput == null && inputActions != null)
         {
             inputActions.Enable();
         }
     }
-    
+
     private void OnDisable()
     {
-        if (inputActions != null)
+        if (playerInput == null && inputActions != null)
         {
             inputActions.Disable();
         }
@@ -380,7 +393,7 @@ public class TopDownPlayerController : MonoBehaviour
     private void HandleMovement()
     {
         // Check if input actions are properly set up
-        if (inputActions == null || moveAction == null)
+        if (moveAction == null)
         {
             return; // Can't move without input
         }
@@ -867,7 +880,7 @@ public class TopDownPlayerController : MonoBehaviour
         characterAnimator?.TriggerDeath();
         
         // Disable input
-        if (inputActions != null)
+        if (playerInput == null && inputActions != null)
         {
             inputActions.Disable();
         }

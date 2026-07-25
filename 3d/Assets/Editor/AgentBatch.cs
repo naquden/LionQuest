@@ -166,6 +166,38 @@ public static class AgentBatch
         }
     }
 
+    public static void DiagnoseSampleScenePlayerSetup()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        bool hasGameSaveController = false;
+        bool hasPlayerSpawner = false;
+        int spawnPointCount = 0;
+
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (root.GetComponentInChildren<GameSaveController>(true) != null) hasGameSaveController = true;
+
+            var spawner = root.GetComponentInChildren<PlayerSpawner>(true);
+            if (spawner != null)
+            {
+                hasPlayerSpawner = true;
+                var so = new SerializedObject(spawner);
+                spawnPointCount = so.FindProperty("spawnPoints").arraySize;
+                Debug.Log($"DIAG|fallbackDefinition={so.FindProperty("fallbackDefinition").objectReferenceValue}");
+                Debug.Log($"DIAG|gameControllerPrefab={so.FindProperty("gameControllerPrefab").objectReferenceValue}");
+                Debug.Log($"DIAG|allCharacters.arraySize={so.FindProperty("allCharacters").arraySize}");
+            }
+        }
+
+        Debug.Log($"DIAG|hasGameSaveController={hasGameSaveController}");
+        Debug.Log($"DIAG|hasPlayerSpawner={hasPlayerSpawner}");
+        Debug.Log($"DIAG|spawnPointCount={spawnPointCount}");
+        Report(OK, "diagnose sample scene player setup done");
+    }
+
     static void RunMapGenerator()
     {
         const string scenePath = "Assets/Scenes/SampleScene.unity";

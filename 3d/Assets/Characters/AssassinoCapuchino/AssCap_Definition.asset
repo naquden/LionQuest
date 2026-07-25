@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a77048ebdd0d749bd922bfeb1362b063, type: 3}
+  m_Name: AssCap_Definition
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterDefinition
+  characterID: AssCap
+  displayName: Assassino Capuchino
+  portrait: {fileID: 0}
+  portraitLocked: {fileID: 0}
+  unlockedByDefault: 1
+  playerPrefab: {fileID: 7565404103289180475, guid: 50ee41024563a4e19a75c625a2c384cc, type: 3}

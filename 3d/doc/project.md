@@ -19,14 +19,17 @@ Upgrades are purchased directly with souls. No level gate, no skill point pool.
 |---|---|---|
 | Strength | `strengthLevel * 5` souls | +0.2× damage multiplier per level |
 | Health | `healthLevel * 5` souls | +20 max HP per level |
-| Speed | *(not implemented)* | `speedLevel` saved/loaded but no getter or effect |
+| Speed (Battle Cry) | `speedLevel * 5` souls | Battle Cry speed multiplier `2 + (speedLevel-1)*0.25` |
+| Skill 1 damage | `skill1DamageLevel * 5` souls | Whirlwind damage multiplier `2 + (skill1DamageLevel-1)*0.25` (applied to basic-attack damage) |
+| Skill 1 radius | `skill1RadiusLevel * 5` souls | Whirlwind hit-circle radius `3 + (skill1RadiusLevel-1)*0.5` world units |
+| Skill cooldown (per skill 1/2/3) | `level * 5` souls | Cooldown multiplier `max(0.4, 1 - (level-1)*0.1)` |
 
 Cost scales linearly: level 1→2 costs 5, 2→3 costs 10, 3→4 costs 15, etc.
 
 ### Save format
 `gamesave.json` at `Application.persistentDataPath`. Top-level: `GameSaveData { List<CharacterSaveData> }`.
 
-Per character: `characterID`, `souls`, `strengthLevel`, `healthLevel`, `speedLevel`, `List<string> unlockedSkills`.
+Per character: `characterID`, `souls`, `strengthLevel`, `healthLevel`, `speedLevel`, `skill1DamageLevel`, `skill1RadiusLevel`, `skill1CooldownLevel`, `skill2CooldownLevel`, `skill3CooldownLevel`, `List<string> unlockedSkills`.
 
 `unlockedSkills` is a stub — saved/loaded but nothing reads or gates on it.
 
@@ -103,15 +106,16 @@ Enemy.Die() → OnDeath event → GameSaveController.OnEnemyKilled() → Charact
 
 ## Known Gaps / Orphaned Code
 
-- **`speedLevel`** — saved and loaded, no getter (`GetMoveSpeedMultiplier`), never applied to `moveSpeed`.
 - **`unlockedSkills`** — serialized list, nothing reads or gates on it. No unlock UI or logic.
-- **Cooldown stat** — no `cooldownLevel`, no reduction formula, cooldown is flat `attackData.cooldown`.
-- **Upgrade UI** — `TryUpgradeStrength()` / `TryUpgradeHealth()` exist on `CharacterStats` but no UI script found that calls them.
+- **Upgrade UI** — `TryUpgradeStrength()` / `TryUpgradeHealth()` / `TryUpgradeSpeed()` / `TryUpgradeSkill1Damage()` / `TryUpgradeSkill1Radius()` / `TryUpgradeSkillCooldown()` exist on `CharacterStats` but no UI script found that calls them.
 
 ---
 
 ## Character: AssassinoCapuchino (`AssCap`)
 
 - Basic attack damage: **60** (`Assets/Characters/AssassinoCapuchino/BasicAttack.asset`)
-- Skill 2 (shuriken): **15** base damage (`ShurikenProjectile.asset`)
-- Enemy base health: **100** → 2 basic-attack hits to kill at strength lvl 1 (60+60=120)
+- Skill 1 (Whirlwind): player-centered AoE, damage = `basicAttackData.damage × GetSkill1DamageMultiplier()` (2.0× at lvl 1 = 120, before strength multiplier), radius = `GetSkill1Radius()` (3.0 world units at lvl 1). Effect prefab `Whirlwind Slash AssCap.prefab`, data asset `Skill1Attack.asset`. 10s base cooldown, scaled by `GetSkillCooldownMultiplier(1)`.
+- Skill 2 (shuriken): **25** base damage (`ShurikenProjectile.asset`), 2 projectiles/throw = 50/throw at strength lvl 1.
+- Skill 3 (Battle Cry): self speed buff, `GetBattleCryMultiplier()` = 2.0× at speedLevel 1, 5s duration, 10s base cooldown (`BattleCry.asset`, `BattleCrySkillData`).
+- All three skills share one **global skill lock**: activating any skill blocks all skills (not basic attack) for that skill's cooldown.
+- Enemy base health: **100** → 2 basic-attack hits to kill at strength lvl 1 (60+60=120), or one Whirlwind hit (120) at skill1DamageLevel 1.

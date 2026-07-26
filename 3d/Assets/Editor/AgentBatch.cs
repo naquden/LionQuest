@@ -26,7 +26,7 @@ public static class AgentBatch
     /// <summary>
     /// Run a named generator by class method.
     /// Usage: AGENT_GEN=StartScreen -executeMethod AgentBatch.RunGenerator
-    /// Supported targets: StartScreen, CharacterSelection, UpgradeScreen
+    /// Supported targets: StartScreen, CharacterSelection, UpgradeScreen, PlayerHud
     /// </summary>
     public static void RunGenerator()
     {
@@ -53,6 +53,12 @@ public static class AgentBatch
                     break;
                 case "TerrainContent":
                     InvokeGeneratorMenu("LionQuest/Generate/Terrain Content");
+                    break;
+                case "AssCapSkills":
+                    InvokeGeneratorMenu("LionQuest/Generate/AssCap Skills");
+                    break;
+                case "PlayerHud":
+                    InvokeGeneratorMenu("LionQuest/Generate/Player HUD");
                     break;
                 case "GenerateMap":
                     RunMapGenerator();
@@ -196,6 +202,91 @@ public static class AgentBatch
         Debug.Log($"DIAG|hasPlayerSpawner={hasPlayerSpawner}");
         Debug.Log($"DIAG|spawnPointCount={spawnPointCount}");
         Report(OK, "diagnose sample scene player setup done");
+    }
+
+    public static void DiagnoseAssCapSkills()
+    {
+        const string prefabPath = "Assets/Characters/AssassinoCapuchino/AssasinoCappuchino.prefab";
+        const string skill1DataPath = "Assets/Characters/AssassinoCapuchino/Skill1Attack.asset";
+        const string battleCryPath = "Assets/Characters/AssassinoCapuchino/BattleCry.asset";
+
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (prefab == null)
+        {
+            Report(FAIL, $"prefab not found at {prefabPath}");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        var controller = prefab.GetComponentInChildren<TopDownPlayerController>(true);
+        var so = new SerializedObject(controller);
+        Debug.Log($"DIAG|skill1AttackData={so.FindProperty("skill1AttackData").objectReferenceValue}");
+        Debug.Log($"DIAG|skill1BaseCooldown={so.FindProperty("skill1BaseCooldown").floatValue}");
+        Debug.Log($"DIAG|skill3BattleCryData={so.FindProperty("skill3BattleCryData").objectReferenceValue}");
+
+        var skill1Data = AssetDatabase.LoadAssetAtPath<AttackData>(skill1DataPath);
+        if (skill1Data != null)
+        {
+            Debug.Log($"DIAG|skill1.damage={skill1Data.damage} radius(collider)={GetSphereRadius(skill1Data.effectPrefab)} spawnAtCenter={skill1Data.spawnAtCharacterCenter}");
+        }
+        else
+        {
+            Debug.Log("DIAG|skill1Data=MISSING");
+        }
+
+        var battleCry = AssetDatabase.LoadAssetAtPath<BattleCrySkillData>(battleCryPath);
+        Debug.Log(battleCry != null
+            ? $"DIAG|battleCry.duration={battleCry.duration} cooldown={battleCry.cooldown}"
+            : "DIAG|battleCryData=MISSING");
+
+        Report(OK, "diagnose asscap skills done");
+    }
+
+    static string GetSphereRadius(GameObject effectPrefab)
+    {
+        if (effectPrefab == null) return "no-effect-prefab";
+        var sphere = effectPrefab.GetComponent<SphereCollider>();
+        return sphere != null ? sphere.radius.ToString("F3") : "no-sphere-collider";
+    }
+
+    public static void DiagnosePlayerHud()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        PlayerHUD hud = null;
+        PlayerSpawner spawner = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (hud == null) hud = root.GetComponentInChildren<PlayerHUD>(true);
+            if (spawner == null) spawner = root.GetComponentInChildren<PlayerSpawner>(true);
+        }
+
+        Debug.Log($"DIAG|hudCanvas={(hud != null ? hud.gameObject.name : "MISSING")}");
+
+        if (hud != null)
+        {
+            var so = new SerializedObject(hud);
+            Debug.Log($"DIAG|panels={so.FindProperty("panels").arraySize}");
+        }
+        else
+        {
+            Debug.Log("DIAG|panels=0");
+        }
+
+        if (spawner != null)
+        {
+            var spawnerSo = new SerializedObject(spawner);
+            var hudRef = spawnerSo.FindProperty("hud").objectReferenceValue;
+            Debug.Log($"DIAG|spawnerHud={(hudRef != null ? hudRef.name : "MISSING")}");
+        }
+        else
+        {
+            Debug.Log("DIAG|spawnerHud=MISSING (no PlayerSpawner found)");
+        }
+
+        Report(OK, "diagnose player hud done");
     }
 
     static void RunMapGenerator()

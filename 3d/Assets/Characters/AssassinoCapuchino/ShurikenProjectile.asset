@@ -15,7 +15,7 @@ MonoBehaviour:
   skillName: Projectile Skill
   projectilePrefab: {fileID: 916733502433444296, guid: e99ada595822c4adca68d6ed1f543dca, type: 3}
   projectileSpeed: 15
-  damage: 15
+  damage: 25
   knockbackForce: 3
   animationLength: 1
   spawnTimesNormalized:

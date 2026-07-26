@@ -63,18 +63,24 @@ public class TopDownPlayerController : MonoBehaviour
     [Tooltip("Attack data for basic attack")]
     [SerializeField] private AttackData basicAttackData;
     
-    [Tooltip("Attack data for Skill 1")]
+    [Tooltip("Attack data for Skill 1 (Whirlwind AoE, centered on the player)")]
     [SerializeField] private AttackData skill1AttackData;
-    
+
+    [Tooltip("Base cooldown for Skill 1 in seconds. Scaled by CharacterStats skill-1 cooldown level.")]
+    [SerializeField] private float skill1BaseCooldown = 10f;
+
     [Tooltip("Attack data for Skill 2 (use this OR skill2ProjectileData, not both)")]
     [SerializeField] private AttackData skill2AttackData;
-    
+
     [Tooltip("Projectile skill data for Skill 2 (e.g., shuriken throw). If set, this is used instead of skill2AttackData.")]
     [SerializeField] private ProjectileSkillData skill2ProjectileData;
-    
+
     [Tooltip("Attack data for Skill 3")]
     [SerializeField] private AttackData skill3AttackData;
-    
+
+    [Tooltip("Battle Cry buff data for Skill 3 (self speed buff). If set, Skill 3 uses this instead of skill3AttackData.")]
+    [SerializeField] private BattleCrySkillData skill3BattleCryData;
+
     [Header("Health")]
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] public float currentHealth;
@@ -106,13 +112,72 @@ public class TopDownPlayerController : MonoBehaviour
     private bool isGrounded = false;
     private GroundType currentGroundType;
     private bool hasWarnedAboutMissingGroundType = false;
-    private float lastSkill2ProjectileTime = -999f;
+    private float skillLockUntilTime = -999f; // no skill usable until Time.time >= this
+    private float skillLockDuration = 0f; // total duration of the active lock, for HUD fill ratio
+    private float battleCrySpeedMultiplier = 1f;
+    private Coroutine battleCryRoutine;
     
     /// <summary>
     /// Returns whether the character is currently moving
     /// </summary>
     public bool IsMoving => isCurrentlyMoving;
-    
+
+    /// <summary>Seconds until skills are usable again (0 = ready). Shared across all 3 skills.</summary>
+    public float SkillCooldownRemaining => Mathf.Max(0f, skillLockUntilTime - Time.time);
+
+    /// <summary>Total duration of the active skill lock, for HUD fill ratio. 0 when never used.</summary>
+    public float SkillCooldownDuration => skillLockDuration;
+
+    /// <summary>1 = fully on cooldown, 0 = ready.</summary>
+    public float SkillCooldownNormalized =>
+        skillLockDuration <= 0f ? 0f : Mathf.Clamp01(SkillCooldownRemaining / skillLockDuration);
+
+    /// <summary>HUD display data for skill slot 1..3. Returns false if the slot is unassigned.</summary>
+    public bool TryGetSkillDisplay(int slot, out string displayName, out Sprite icon)
+    {
+        displayName = null;
+        icon = null;
+
+        switch (slot)
+        {
+            case 1:
+                if (skill1AttackData == null) return false;
+                displayName = skill1AttackData.attackName;
+                icon = skill1AttackData.icon;
+                return true;
+            case 2:
+                if (skill2ProjectileData != null)
+                {
+                    displayName = skill2ProjectileData.skillName;
+                    icon = skill2ProjectileData.icon;
+                    return true;
+                }
+                if (skill2AttackData != null)
+                {
+                    displayName = skill2AttackData.attackName;
+                    icon = skill2AttackData.icon;
+                    return true;
+                }
+                return false;
+            case 3:
+                if (skill3BattleCryData != null)
+                {
+                    displayName = skill3BattleCryData.skillName;
+                    icon = skill3BattleCryData.icon;
+                    return true;
+                }
+                if (skill3AttackData != null)
+                {
+                    displayName = skill3AttackData.attackName;
+                    icon = skill3AttackData.icon;
+                    return true;
+                }
+                return false;
+            default:
+                return false;
+        }
+    }
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -441,7 +506,7 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         // Calculate movement speed
-        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier;
+        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier * battleCrySpeedMultiplier;
         
         // Convert 2D input to 3D movement on X-Z plane
         // Reset moveDirection first to ensure clean state
@@ -614,41 +679,64 @@ public class TopDownPlayerController : MonoBehaviour
         }
     }
     
+    /// <summary>True if any skill is currently locked out by the global skill-lock cooldown.</summary>
+    private bool SkillsLocked => Time.time < skillLockUntilTime;
+
+    /// <summary>Start the global skill lock using skillIndex's stat-scaled cooldown.</summary>
+    private void LockSkills(int skillIndex, float baseCooldown)
+    {
+        float mult = characterStats != null ? characterStats.GetSkillCooldownMultiplier(skillIndex) : 1f;
+        skillLockDuration = baseCooldown * mult;
+        skillLockUntilTime = Time.time + skillLockDuration;
+    }
+
     private void HandleSkills()
     {
+        // Basic attack is handled separately (HandleAttack) and is never gated by the skill lock.
+        if (SkillsLocked) return;
+
         // Check if skill buttons were pressed this frame
         if (skill1Action != null && skill1Action.WasPressedThisFrame())
         {
-            if (characterAnimator != null)
+            if (combatController != null && skill1AttackData != null && basicAttackData != null)
             {
-                characterAnimator.TriggerSkill1();
+                float dmgMult = characterStats != null ? characterStats.GetSkill1DamageMultiplier() : 2f;
+                float radius = characterStats != null ? characterStats.GetSkill1Radius() : 3f;
+
+                if (characterAnimator != null)
+                {
+                    characterAnimator.TriggerSkill1();
+                }
+
+                combatController.PerformAttack(
+                    skill1AttackData,
+                    basicAttackData.damage * dmgMult,
+                    radius,
+                    bypassCooldown: true);
+
+                LockSkills(1, skill1BaseCooldown);
             }
-            
-            // Perform skill 1 attack
-            if (combatController != null && skill1AttackData != null)
+            else
             {
-                combatController.PerformAttack(skill1AttackData);
+                Debug.LogError($"[Player] Skill 1 needs combatController, skill1AttackData and basicAttackData assigned.");
             }
+            return; // one skill per frame
         }
-        
+
         if (skill2Action != null && skill2Action.WasPressedThisFrame())
         {
             // Check if using projectile skill (e.g., shuriken throw)
             if (skill2ProjectileData != null)
             {
-                // Check cooldown
-                if (Time.time - lastSkill2ProjectileTime >= skill2ProjectileData.cooldown)
+                if (characterAnimator != null)
                 {
-                    lastSkill2ProjectileTime = Time.time;
-                    
-                    if (characterAnimator != null)
-                    {
-                        characterAnimator.TriggerSkill2();
-                    }
-                    
-                    // Start timed projectile spawning
-                    StartCoroutine(SpawnProjectilesAtTimes(skill2ProjectileData));
+                    characterAnimator.TriggerSkill2();
                 }
+
+                // Start timed projectile spawning
+                StartCoroutine(SpawnProjectilesAtTimes(skill2ProjectileData));
+
+                LockSkills(2, skill2ProjectileData.cooldown);
             }
             else
             {
@@ -657,29 +745,69 @@ public class TopDownPlayerController : MonoBehaviour
                 {
                     characterAnimator.TriggerSkill2();
                 }
-                
+
                 if (combatController != null && skill2AttackData != null)
                 {
-                    combatController.PerformAttack(skill2AttackData);
+                    combatController.PerformAttack(skill2AttackData, bypassCooldown: true);
+                    LockSkills(2, skill2AttackData.cooldown);
                 }
             }
+            return;
         }
-        
+
         if (skill3Action != null && skill3Action.WasPressedThisFrame())
         {
-            if (characterAnimator != null)
+            if (skill3BattleCryData != null)
             {
-                characterAnimator.TriggerSkill3();
+                // Battle Cry self-buff (global skill lock gates re-use, no self-stacking)
+                if (characterAnimator != null)
+                {
+                    characterAnimator.TriggerSkill3();
+                }
+
+                if (battleCryRoutine != null) StopCoroutine(battleCryRoutine);
+                battleCryRoutine = StartCoroutine(BattleCryRoutine(skill3BattleCryData));
+
+                LockSkills(3, skill3BattleCryData.cooldown);
             }
-            
-            // Perform skill 3 attack
-            if (combatController != null && skill3AttackData != null)
+            else
             {
-                combatController.PerformAttack(skill3AttackData);
+                // Legacy fallback: AttackData-based skill 3
+                if (characterAnimator != null)
+                {
+                    characterAnimator.TriggerSkill3();
+                }
+
+                if (combatController != null && skill3AttackData != null)
+                {
+                    combatController.PerformAttack(skill3AttackData, bypassCooldown: true);
+                    LockSkills(3, skill3AttackData.cooldown);
+                }
             }
+            return;
         }
     }
-    
+
+    private IEnumerator BattleCryRoutine(BattleCrySkillData data)
+    {
+        float mult = characterStats != null ? characterStats.GetBattleCryMultiplier() : 2f;
+
+        if (data.activateEffectPrefab != null)
+        {
+            Instantiate(data.activateEffectPrefab, transform.position, transform.rotation, transform);
+        }
+
+        battleCrySpeedMultiplier = mult;
+        Debug.Log($"[Player] Battle Cry! Speed x{mult} for {data.duration}s");
+
+        yield return new WaitForSeconds(data.duration);
+
+        battleCrySpeedMultiplier = 1f;
+        battleCryRoutine = null;
+        Debug.Log($"[Player] Battle Cry ended.");
+    }
+
+
     
     /// <summary>
     /// Spawns projectiles at specific times during the skill animation
@@ -875,10 +1003,17 @@ public class TopDownPlayerController : MonoBehaviour
     private void Die()
     {
         Debug.Log($"[Player] {gameObject.name} died!");
-        
+
+        if (battleCryRoutine != null)
+        {
+            StopCoroutine(battleCryRoutine);
+            battleCryRoutine = null;
+        }
+        battleCrySpeedMultiplier = 1f;
+
         OnDeath?.Invoke();
         characterAnimator?.TriggerDeath();
-        
+
         // Disable input
         if (playerInput == null && inputActions != null)
         {

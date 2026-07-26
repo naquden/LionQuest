@@ -50,9 +50,32 @@ public class AttackEffect : MonoBehaviour
     private bool colliderDisabled = false;
     
     /// <summary>
+    /// Override the hit sphere's world-space radius (for stat-scaled AoE).
+    /// Must be called before Initialize(), which reads the collider bounds.
+    /// </summary>
+    public void SetRadius(float worldRadius)
+    {
+        Collider col = GetComponent<Collider>();
+        if (col is SphereCollider sphere)
+        {
+            float maxAbsLossyScale = Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.z));
+            if (maxAbsLossyScale <= 0f)
+            {
+                Debug.LogError($"[AttackEffect] {gameObject.name}: lossyScale is zero, cannot compute local radius for SetRadius.");
+                return;
+            }
+            sphere.radius = worldRadius / maxAbsLossyScale;
+        }
+        else
+        {
+            Debug.LogError($"[AttackEffect] {gameObject.name}: SetRadius requires a SphereCollider, found {(col != null ? col.GetType().Name : "null")}.");
+        }
+    }
+
+    /// <summary>
     /// Initialize the attack effect with combat data
     /// </summary>
-    public void Initialize(float damage, float knockbackForce, float knockbackMultiplier, 
+    public void Initialize(float damage, float knockbackForce, float knockbackMultiplier,
                           Vector3 attackDirection, GameObject attacker, float hitWindowDuration)
     {
         this.damage = damage;

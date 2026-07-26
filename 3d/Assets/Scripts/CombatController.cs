@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// Handles player combat - detecting enemies and applying damage/knockback.
@@ -30,7 +31,7 @@ public class CombatController : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool debugCombat = false;
     
-    private float lastAttackTime = 0f;
+    private readonly Dictionary<AttackData, float> lastUseTimes = new Dictionary<AttackData, float>();
     
     /// <summary>
     /// Event called when hitting an enemy
@@ -76,49 +77,57 @@ public class CombatController : MonoBehaviour
     }
     
     /// <summary>
-    /// Perform an attack with the given attack data
+    /// Perform an attack with the given attack data.
     /// </summary>
-    public void PerformAttack(AttackData attackData)
+    /// <param name="damageOverride">If >= 0, used instead of attackData.damage (before damageMultiplier).</param>
+    /// <param name="radiusOverride">If > 0, overrides the effect's SphereCollider world radius (stat-scaled AoE).</param>
+    /// <param name="bypassCooldown">Skip this controller's per-attack cooldown check (caller owns gating, e.g. a global skill lock).</param>
+    public void PerformAttack(AttackData attackData, float damageOverride = -1f, float radiusOverride = -1f, bool bypassCooldown = false)
     {
         if (attackData == null)
         {
             Debug.LogError($"[Combat] {gameObject.name}: PerformAttack called with null AttackData!");
             return;
         }
-        
+
         if (attackData.effectPrefab == null)
         {
             Debug.LogError($"[Combat] {gameObject.name}: AttackData '{attackData.attackName}' has no effectPrefab assigned! Attack requires an effect prefab with AttackEffect script.");
             return;
         }
-        
-        // Check cooldown
-        if (Time.time - lastAttackTime < attackData.cooldown)
+
+        // Check cooldown (per-AttackData, unless the caller owns gating)
+        if (!bypassCooldown)
         {
-            return;
+            float lastUse = lastUseTimes.TryGetValue(attackData, out float t) ? t : -999f;
+            if (Time.time - lastUse < attackData.cooldown)
+            {
+                return;
+            }
         }
-        
-        lastAttackTime = Time.time;
-        
+
+        lastUseTimes[attackData] = Time.time;
+
         if (debugCombat)
         {
             Debug.Log($"[Combat] {gameObject.name} performing '{attackData.attackName}'");
         }
-        
+
         // Spawn effect prefab (handles its own collision detection)
-        SpawnAttackEffect(attackData);
+        SpawnAttackEffect(attackData, damageOverride, radiusOverride);
     }
-    
+
     /// <summary>
-    /// Spawn the attack effect prefab at the attack point
+    /// Spawn the attack effect prefab at the attack point (or character center)
     /// </summary>
-    private void SpawnAttackEffect(AttackData attackData)
+    private void SpawnAttackEffect(AttackData attackData, float damageOverride, float radiusOverride)
     {
-        Vector3 spawnPos = attackPoint.position;
+        Vector3 basePos = attackData.spawnAtCharacterCenter ? transform.position : attackPoint.position;
+        Vector3 spawnPos = basePos + transform.TransformDirection(attackData.spawnOffset);
         Quaternion spawnRot = transform.rotation;
-        
+
         GameObject effectObj = Instantiate(attackData.effectPrefab, spawnPos, spawnRot);
-        
+
         // Initialize the attack effect
         AttackEffect effect = effectObj.GetComponent<AttackEffect>();
         if (effect == null)
@@ -127,9 +136,16 @@ public class CombatController : MonoBehaviour
             Destroy(effectObj);
             return;
         }
-        
+
+        if (radiusOverride > 0f)
+        {
+            effect.SetRadius(radiusOverride);
+        }
+
+        float baseDamage = damageOverride >= 0f ? damageOverride : attackData.damage;
+
         effect.Initialize(
-            attackData.damage * damageMultiplier,
+            baseDamage * damageMultiplier,
             attackData.knockbackForce,
             knockbackMultiplier,
             transform.forward,
@@ -137,7 +153,7 @@ public class CombatController : MonoBehaviour
             attackData.hitWindowDuration
         );
         effect.SetTargetTag(targetTag);
-        
+
         if (debugCombat)
         {
             Debug.Log($"[Combat] Spawned attack effect '{attackData.effectPrefab.name}' at {spawnPos}");

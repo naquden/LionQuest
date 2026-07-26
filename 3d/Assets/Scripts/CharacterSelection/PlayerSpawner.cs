@@ -12,6 +12,7 @@ public class PlayerSpawner : MonoBehaviour
     [SerializeField] private CharacterDefinition fallbackDefinition;
     [SerializeField] private GameObject gameControllerPrefab;
     [SerializeField] private CharacterDefinition[] allCharacters = System.Array.Empty<CharacterDefinition>();
+    [SerializeField] private PlayerHUD hud;
 
     private void Start()
     {
@@ -52,7 +53,7 @@ public class PlayerSpawner : MonoBehaviour
         }
 
         Transform point = spawnPoints.Length > 0 ? spawnPoints[0] : transform;
-        SpawnPlayer(fallbackDefinition, point, pairWithDevice: null);
+        SpawnPlayer(fallbackDefinition, point, pairWithDevice: null, playerIndex: 0);
     }
 
     private void SpawnSelectedPlayer(CharacterSelectionData.Selection selection, int index)
@@ -67,10 +68,10 @@ public class PlayerSpawner : MonoBehaviour
         Transform point = index < spawnPoints.Length ? spawnPoints[index] : transform;
 
         InputDevice device = selection.deviceId >= 0 ? InputSystem.GetDeviceById(selection.deviceId) : null;
-        SpawnPlayer(definition, point, device);
+        SpawnPlayer(definition, point, device, index);
     }
 
-    private void SpawnPlayer(CharacterDefinition definition, Transform point, InputDevice pairWithDevice)
+    private void SpawnPlayer(CharacterDefinition definition, Transform point, InputDevice pairWithDevice, int playerIndex)
     {
         GameObject instance = Instantiate(definition.playerPrefab);
         instance.SetActive(false);
@@ -91,6 +92,19 @@ public class PlayerSpawner : MonoBehaviour
         }
 
         instance.SetActive(true);
+
+        if (hud != null)
+        {
+            TopDownPlayerController controller = instance.GetComponent<TopDownPlayerController>();
+            if (controller != null && stats != null)
+            {
+                hud.BindPlayer(playerIndex, controller, stats, definition);
+            }
+        }
+        else
+        {
+            Debug.LogError("PlayerSpawner: hud is not assigned — no HUD will be shown.");
+        }
     }
 
     private CharacterDefinition FindDefinition(string characterID)

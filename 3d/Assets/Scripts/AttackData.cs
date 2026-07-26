@@ -10,7 +10,10 @@ public class AttackData : ScriptableObject
     [Header("Attack Info")]
     [Tooltip("Name of the attack (for debugging/logging)")]
     public string attackName = "Attack";
-    
+
+    [Tooltip("HUD icon for this skill. Optional — HUD shows a placeholder if unset.")]
+    public Sprite icon;
+
     [Header("Effect (Required)")]
     [Tooltip("Prefab to spawn at AttackPoint. Must have a Collider and AttackEffect script for hit detection.")]
     public GameObject effectPrefab;
@@ -30,6 +33,13 @@ public class AttackData : ScriptableObject
     [Header("Cooldown")]
     [Tooltip("Cooldown time before this attack can be used again")]
     public float cooldown = 0.5f;
+
+    [Header("Spawn")]
+    [Tooltip("Spawn the effect centered on the character instead of at the AttackPoint (for around-self AoE).")]
+    public bool spawnAtCharacterCenter = false;
+
+    [Tooltip("Extra local-space offset applied to the spawn position.")]
+    public Vector3 spawnOffset = Vector3.zero;
 }
 
 

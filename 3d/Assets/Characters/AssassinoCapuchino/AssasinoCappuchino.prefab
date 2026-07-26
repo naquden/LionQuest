@@ -304,10 +304,12 @@ MonoBehaviour:
   characterAnimator: {fileID: 5269021045767024919}
   combatController: {fileID: 0}
   basicAttackData: {fileID: 11400000, guid: dd784e5d1b590442988ed86533883f38, type: 2}
-  skill1AttackData: {fileID: 0}
+  skill1AttackData: {fileID: 11400000, guid: b560e3082a75545ab9da243139028a7b, type: 2}
+  skill1BaseCooldown: 10
   skill2AttackData: {fileID: 0}
   skill2ProjectileData: {fileID: 11400000, guid: bad4dfd02479a4300ac1814a6995d0d2, type: 2}
   skill3AttackData: {fileID: 0}
+  skill3BattleCryData: {fileID: 11400000, guid: b94c766c44075426386b16798fbef8b0, type: 2}
   maxHealth: 100
   currentHealth: 50
   characterStats: {fileID: 0}
@@ -421,6 +423,11 @@ MonoBehaviour:
   strengthLevel: 1
   healthLevel: 1
   speedLevel: 1
+  skill1DamageLevel: 1
+  skill1RadiusLevel: 1
+  skill1CooldownLevel: 1
+  skill2CooldownLevel: 1
+  skill3CooldownLevel: 1
 --- !u!114 &4545922439460293014
 MonoBehaviour:
   m_ObjectHideFlags: 0

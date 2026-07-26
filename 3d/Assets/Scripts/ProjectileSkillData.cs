@@ -10,7 +10,10 @@ public class ProjectileSkillData : ScriptableObject
     [Header("Skill Info")]
     [Tooltip("Name of the skill (for debugging/logging)")]
     public string skillName = "Projectile Skill";
-    
+
+    [Tooltip("HUD icon for this skill. Optional — HUD shows a placeholder if unset.")]
+    public Sprite icon;
+
     [Header("Projectile")]
     [Tooltip("Projectile prefab to spawn (must have Projectile script)")]
     public GameObject projectilePrefab;

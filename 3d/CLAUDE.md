@@ -35,6 +35,7 @@ sh tools/unity-batch.sh Compile
 sh tools/unity-batch.sh RunGenerator StartScreen
 sh tools/unity-batch.sh RunGenerator CharacterSelection
 sh tools/unity-batch.sh RunGenerator UpgradeScreen
+sh tools/unity-batch.sh RunGenerator PlayerHud
 
 # Run any menu item by path
 sh tools/unity-batch.sh RunGeneratorByMenuPath "LionQuest/Generate/Start Screen"

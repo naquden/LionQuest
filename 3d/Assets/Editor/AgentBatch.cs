@@ -26,7 +26,7 @@ public static class AgentBatch
     /// <summary>
     /// Run a named generator by class method.
     /// Usage: AGENT_GEN=StartScreen -executeMethod AgentBatch.RunGenerator
-    /// Supported targets: StartScreen, CharacterSelection, UpgradeScreen, PlayerHud
+    /// Supported targets: StartScreen, CharacterSelection, UpgradeScreen, PlayerHud, SkillIcons
     /// </summary>
     public static void RunGenerator()
     {
@@ -59,6 +59,12 @@ public static class AgentBatch
                     break;
                 case "PlayerHud":
                     InvokeGeneratorMenu("LionQuest/Generate/Player HUD");
+                    break;
+                case "PauseMenu":
+                    InvokeGeneratorMenu("LionQuest/Generate/Pause Menu");
+                    break;
+                case "SkillIcons":
+                    InvokeGeneratorMenu("LionQuest/Generate/Skill Icons");
                     break;
                 case "GenerateMap":
                     RunMapGenerator();
@@ -436,7 +442,101 @@ public static class AgentBatch
             }
         }
 
+        if (panel != null && def != null && !DiagnoseSkillTreeLayout(panel, def))
+        {
+            Report(FAIL, "one or more skill tree nodes fall outside the node container bounds");
+            EditorApplication.Exit(1);
+            return;
+        }
+
         Report(OK, "diagnose skill tree done");
+    }
+
+    public static void DiagnosePauseMenu()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        PauseMenuController pauseMenu = null;
+        PlayerSpawner spawner = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (pauseMenu == null) pauseMenu = root.GetComponentInChildren<PauseMenuController>(true);
+            if (spawner == null) spawner = root.GetComponentInChildren<PlayerSpawner>(true);
+        }
+
+        Debug.Log($"DIAG|pauseMenu={(pauseMenu != null ? pauseMenu.gameObject.name : "MISSING")}");
+
+        if (pauseMenu != null)
+        {
+            var so = new SerializedObject(pauseMenu);
+            string[] props = { "panel", "resumeButton", "characterSelectionButton", "exitButton", "inputActions" };
+            foreach (string propName in props)
+            {
+                var refValue = so.FindProperty(propName).objectReferenceValue;
+                Debug.Log($"DIAG|pauseMenu.{propName}={(refValue != null ? refValue.name : "MISSING")}");
+            }
+            Debug.Log($"DIAG|pauseMenu.characterSelectionSceneName={so.FindProperty("characterSelectionSceneName").stringValue}");
+        }
+
+        if (spawner != null)
+        {
+            var so = new SerializedObject(spawner);
+            var refValue = so.FindProperty("pauseMenu").objectReferenceValue;
+            Debug.Log($"DIAG|spawner.pauseMenu={(refValue != null ? refValue.name : "MISSING")}");
+        }
+        else
+        {
+            Debug.Log("DIAG|spawner=MISSING (no PlayerSpawner found)");
+        }
+
+        Report(OK, "diagnose pause menu done");
+    }
+
+    /// <summary>
+    /// Opens the panel against a real CharacterDefinition and asserts every spawned node's
+    /// computed on-screen rect falls inside the node container's bounds — a machine check for
+    /// the exact blank-viewport regression seen in review (anchor mismatch put every node
+    /// ~1100px right / ~700px below the masked viewport with no visible error).
+    /// </summary>
+    static bool DiagnoseSkillTreeLayout(SkillTreeScreenController panel, CharacterDefinition def)
+    {
+        panel.gameObject.SetActive(true);
+        panel.Open(def, null);
+
+        var so = new SerializedObject(panel);
+        var containerProp = so.FindProperty("nodeContainer").objectReferenceValue as RectTransform;
+        if (containerProp == null)
+        {
+            Debug.Log("DIAG|nodeContainer=MISSING");
+            return false;
+        }
+
+        Rect bounds = containerProp.rect;
+        Debug.Log($"DIAG|nodeContainerBounds={bounds}");
+
+        int nodeCount = 0;
+        int outOfBounds = 0;
+        foreach (RectTransform child in containerProp)
+        {
+            var nodeUi = child.GetComponent<SkillTreeNodeUI>();
+            if (nodeUi == null) continue;
+            nodeCount++;
+
+            Vector2 pos = child.anchoredPosition;
+            bool inBounds = pos.x >= bounds.xMin && pos.x <= bounds.xMax && pos.y >= bounds.yMin && pos.y <= bounds.yMax;
+            if (!inBounds)
+            {
+                outOfBounds++;
+                Debug.Log($"DIAG|nodeOutOfBounds id={nodeUi.NodeId} pos={pos}");
+            }
+        }
+
+        Debug.Log($"DIAG|skillTreeNodeCount={nodeCount} outOfBounds={outOfBounds}");
+
+        panel.Close();
+        return outOfBounds == 0 && nodeCount > 0;
     }
 
     /// <summary>

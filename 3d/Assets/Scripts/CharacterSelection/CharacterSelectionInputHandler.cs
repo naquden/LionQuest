@@ -85,8 +85,8 @@ public class CharacterSelectionInputHandler : MonoBehaviour
         }
     }
 
-    /// <summary>While the skill tree panel is open: Navigate y moves the node cursor, Navigate x
-    /// switches skill tabs, Submit buys the selected node, Cancel closes the panel.</summary>
+    /// <summary>While the skill tree panel is open: Navigate moves the spatial node cursor in
+    /// whichever direction is pressed, Submit buys/ranks the selected node, Cancel closes the panel.</summary>
     private void UpdateUpgradePanelInput()
     {
         if (submitAction != null && submitAction.WasPressedThisFrame())
@@ -101,17 +101,10 @@ public class CharacterSelectionInputHandler : MonoBehaviour
 
         if (navigateAction == null) return;
         Vector2 dir = navigateAction.ReadValue<Vector2>();
+        if (dir.sqrMagnitude < 0.25f) return;
         if (Time.time - lastNavigateTime <= NavigateRepeatDelay) return;
 
-        if (Mathf.Abs(dir.x) > Mathf.Abs(dir.y) && Mathf.Abs(dir.x) > 0.5f)
-        {
-            lastNavigateTime = Time.time;
-            CharacterSelectionManager.Instance.UpgradeSwitchTab(slotIndex, dir.x > 0f ? 1 : -1);
-        }
-        else if (Mathf.Abs(dir.y) > 0.5f)
-        {
-            lastNavigateTime = Time.time;
-            CharacterSelectionManager.Instance.UpgradeNavigate(slotIndex, dir.y > 0f ? -1 : 1);
-        }
+        lastNavigateTime = Time.time;
+        CharacterSelectionManager.Instance.UpgradeNavigate(slotIndex, dir);
     }
 }

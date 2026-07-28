@@ -287,15 +287,24 @@ public static class PlayerHudGenerator
         rowRect.sizeDelta = new Vector2(SkillSlotCount * slotSize + (SkillSlotCount - 1) * spacing, BandSkillSlotsHeight);
         rowRect.anchoredPosition = new Vector2(corner.x > 0.5f ? -12 : 12, -BandSkillSlotsTop);
 
+        // Layout group so hidden (locked) slots close the gap instead of leaving a hole.
+        var rowLayout = rowGo.AddComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = spacing;
+        rowLayout.childControlWidth = false;
+        rowLayout.childControlHeight = false;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = false;
+        rowLayout.childAlignment = corner.x > 0.5f ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
+
         for (int i = 0; i < SkillSlotCount; i++)
         {
-            var slotGo = new GameObject($"Slot_{i + 1}", typeof(RectTransform), typeof(Image));
+            var slotGo = new GameObject($"Slot_{i + 1}", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
             slotGo.transform.SetParent(rowGo.transform, false);
             var slotRect = slotGo.GetComponent<RectTransform>();
-            slotRect.anchorMin = slotRect.anchorMax = new Vector2(0f, 0f);
-            slotRect.pivot = new Vector2(0f, 0f);
             slotRect.sizeDelta = new Vector2(slotSize, slotSize);
-            slotRect.anchoredPosition = new Vector2(i * (slotSize + spacing), 0);
+            var slotLayoutElement = slotGo.GetComponent<LayoutElement>();
+            slotLayoutElement.preferredWidth = slotSize;
+            slotLayoutElement.preferredHeight = slotSize;
             Image background = slotGo.GetComponent<Image>();
             background.sprite = UiTheme.RoundedPanelSprite;
             background.type = Image.Type.Sliced;
@@ -325,7 +334,7 @@ public static class PlayerHudGenerator
             overlay.fillOrigin = (int)Image.Origin360.Top;
             overlay.fillClockwise = true;
             overlay.fillAmount = 0f;
-            overlay.color = new Color(0f, 0f, 0f, 0.75f);
+            overlay.color = new Color(0.82f, 0.82f, 0.85f, 0.5f);
             SetNoRaycast(overlay);
             overlays[i] = overlay;
 

@@ -131,9 +131,9 @@ public class PlayerSlotUI : MonoBehaviour
     {
         if (characterNameText != null) characterNameText.text = character.displayName;
         if (soulsValueText != null) soulsValueText.text = saveData.souls.ToString();
-        strengthBar?.Set(saveData.strengthLevel);
-        healthBar?.Set(saveData.healthLevel);
-        speedBar?.Set(saveData.speedLevel);
+        strengthBar?.Set(SkillTreeService.GetAttributeLevel(character, saveData, SkillEffect.Strength));
+        healthBar?.Set(SkillTreeService.GetAttributeLevel(character, saveData, SkillEffect.Health));
+        speedBar?.Set(SkillTreeService.GetAttributeLevel(character, saveData, SkillEffect.Speed));
 
         if (previewStage != null) previewStage.Show(character);
     }

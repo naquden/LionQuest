@@ -165,7 +165,7 @@ public class CharacterSelectionManager : MonoBehaviour
 
     // --- Input forwarded to the open skill tree panel while a slot is Upgrading ---
 
-    public void UpgradeNavigate(int slotIndex, int direction)
+    public void UpgradeNavigate(int slotIndex, Vector2 direction)
     {
         if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
         skillTreeScreen.Navigate(direction);
@@ -181,12 +181,6 @@ public class CharacterSelectionManager : MonoBehaviour
     {
         if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
         skillTreeScreen.Close();
-    }
-
-    public void UpgradeSwitchTab(int slotIndex, int direction)
-    {
-        if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
-        skillTreeScreen.SwitchTab(direction);
     }
 
     private void CloseUpgrade(int slotIndex)

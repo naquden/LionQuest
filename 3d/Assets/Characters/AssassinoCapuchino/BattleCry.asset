@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: BattleCry
   m_EditorClassIdentifier: Assembly-CSharp::BattleCrySkillData
   skillName: Battle Cry
+  icon: {fileID: 21300000, guid: 148d7d198083d4cf3acecb0f406df134, type: 3}
   duration: 5
   cooldown: 10
   activateEffectPrefab: {fileID: 0}

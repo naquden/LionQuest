@@ -105,6 +105,7 @@ public class TopDownPlayerController : MonoBehaviour
     private InputAction skill1Action;
     private InputAction skill2Action;
     private InputAction skill3Action;
+    private InputAction pauseAction;
     private Vector3 moveDirection;
     private float currentSpeed;
     private bool isCurrentlyMoving = false;
@@ -236,6 +237,7 @@ public class TopDownPlayerController : MonoBehaviour
             skill1Action = playerInput.actions["Player/Skill1"];
             skill2Action = playerInput.actions["Player/Skill2"];
             skill3Action = playerInput.actions["Player/Skill3"];
+            pauseAction = playerInput.actions["Player/Pause"];
         }
         else if (inputActions != null)
         {
@@ -301,6 +303,16 @@ public class TopDownPlayerController : MonoBehaviour
             else
             {
                 skill3Action.Enable();
+            }
+
+            pauseAction = inputActions.FindAction("Player/Pause");
+            if (pauseAction == null)
+            {
+                Debug.LogWarning($"TopDownPlayerController: Could not find 'Player/Pause' action. Pause menu will be disabled.");
+            }
+            else
+            {
+                pauseAction.Enable();
             }
         }
         else
@@ -385,7 +397,7 @@ public class TopDownPlayerController : MonoBehaviour
         if (characterStats != null)
         {
             maxHealth = characterStats.GetMaxHealth();
-            Debug.Log($"[Player] Stats loaded from CharacterStats. Max Health: {maxHealth} (Level {characterStats.healthLevel})");
+            Debug.Log($"[Player] Stats loaded from CharacterStats. Max Health: {maxHealth}");
             
             // Listen for upgrades to update stats dynamically
             characterStats.OnStatsUpgraded += UpdateStatsFromUpgrade;
@@ -398,7 +410,7 @@ public class TopDownPlayerController : MonoBehaviour
         {
             float dmgMult = characterStats.GetDamageMultiplier();
             combatController.SetDamageMultiplier(dmgMult);
-            Debug.Log($"[Player] Damage Multiplier set to {dmgMult}x (Level {characterStats.strengthLevel})");
+            Debug.Log($"[Player] Damage Multiplier set to {dmgMult}x");
         }
     }
     
@@ -445,8 +457,22 @@ public class TopDownPlayerController : MonoBehaviour
     
     private void Update()
     {
+        if (pauseAction != null && pauseAction.WasPressedThisFrame())
+        {
+            if (PauseMenuController.Instance != null)
+            {
+                PauseMenuController.Instance.Toggle();
+            }
+            else
+            {
+                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': PauseMenuController.Instance is missing — pause menu was not generated into this scene.");
+            }
+        }
+
+        if (PauseMenuController.Instance != null && PauseMenuController.Instance.IsOpen) return;
+
         // Debug Player Position for Jitter
-        if (Time.frameCount % 5 == 0 && rb != null) 
+        if (Time.frameCount % 5 == 0 && rb != null)
         {
              // Debug.Log($"[Player] Pos: {transform.position.ToString("F4")} | Vel: {rb.linearVelocity.ToString("F4")}");
         }

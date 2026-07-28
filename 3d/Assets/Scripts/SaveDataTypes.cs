@@ -13,14 +13,9 @@ public class CharacterSaveData
     public string characterID;
     public int souls;
 
-    // Attributes
-    public int strengthLevel = 1;
-    public int healthLevel = 1;
-    public int speedLevel = 1;
-
-    // Purchased skill-tree nodes, as "skillId/nodeId" (e.g. "battlecry/cooldown_2s").
+    // "skillId/nodeId:rank" keys, e.g. "attributes/strength_1:3", "battlecry/unlock:1".
     // The skill tree (CharacterDefinition.skillTrees) is the source of truth for effect
-    // values; this list is the only skill-related state that gets persisted.
+    // values and derived attribute levels; this list is the only persisted skill/attribute state.
     public List<string> purchasedSkillNodes = new List<string>();
 
     // Constructor
@@ -28,9 +23,6 @@ public class CharacterSaveData
     {
         characterID = id;
         souls = 0;
-        strengthLevel = 1;
-        healthLevel = 1;
-        speedLevel = 1;
         purchasedSkillNodes = new List<string>();
     }
 }

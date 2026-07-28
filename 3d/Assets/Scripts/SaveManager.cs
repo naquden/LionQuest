@@ -26,9 +26,6 @@ public static class SaveManager
         {
             // Update existing stats
             existing.souls = charData.souls;
-            existing.strengthLevel = charData.strengthLevel;
-            existing.healthLevel = charData.healthLevel;
-            existing.speedLevel = charData.speedLevel;
             existing.purchasedSkillNodes = new List<string>(charData.purchasedSkillNodes);
         }
         else

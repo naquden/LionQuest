@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: ShurikenProjectile
   m_EditorClassIdentifier: Assembly-CSharp::ProjectileSkillData
   skillName: Projectile Skill
+  icon: {fileID: 21300000, guid: e76a2576225c4433cb265c0167f1ce69, type: 3}
   projectilePrefab: {fileID: 916733502433444296, guid: e99ada595822c4adca68d6ed1f543dca, type: 3}
   projectileSpeed: 15
   damage: 25

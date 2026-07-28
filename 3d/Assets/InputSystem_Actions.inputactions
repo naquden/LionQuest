@@ -295,6 +295,38 @@
                             "isPartOfComposite": false
                         }
                     ]
+                },
+                {
+                    "name": "Pause",
+                    "type": "Button",
+                    "id": "e9f0a1b2-c3d4-5678-2345-789012345678",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "f0a1b2c3-d4e5-6789-3456-890123456789",
+                            "path": "<Keyboard>/escape",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Pause",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "",
+                            "id": "a1b2c3d4-e5f6-7890-4567-901234567890",
+                            "path": "<Gamepad>/start",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Pause",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
                 }
             ],
             "bindings": []

@@ -13,8 +13,11 @@ MonoBehaviour:
   m_Name: BasicAttack
   m_EditorClassIdentifier: Assembly-CSharp::AttackData
   attackName: Attack
+  icon: {fileID: 21300000, guid: 73d29a35bc0834665925c7595a0fbe2f, type: 3}
   effectPrefab: {fileID: 5503505460791601945, guid: 0efc27d1112ec4d0086c754286948592, type: 3}
   hitWindowDuration: 0.15
   damage: 60
   knockbackForce: 3
   cooldown: 0.5
+  spawnAtCharacterCenter: 0
+  spawnOffset: {x: 0, y: 0, z: 0}

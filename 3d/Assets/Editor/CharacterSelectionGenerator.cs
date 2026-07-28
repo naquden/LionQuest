@@ -176,6 +176,11 @@ public static class CharacterSelectionGenerator
         cardBg.type = Image.Type.Sliced;
         cardBg.color = UiTheme.Surface;
 
+        // Floor for SlotRow's HorizontalLayoutGroup: below this width the 260px preview area
+        // and stat rows no longer fit, so cards must clip at the row edge instead of the layout
+        // group compressing them into an overlapping stack.
+        root.AddComponent<LayoutElement>().minWidth = 340f;
+
         // Soft accent glow sits behind the card, slightly oversized.
         var glowGo = new GameObject("Glow", typeof(RectTransform), typeof(Image));
         glowGo.transform.SetParent(root.transform, false);

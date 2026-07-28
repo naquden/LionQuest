@@ -47,6 +47,8 @@ public static class UiTheme
     public static Sprite PillFillSprite => LoadOrBuildSprite("PillFill", 32, PillTex, new Vector4(8, 8, 8, 8));
     public static Sprite CircleSprite => LoadOrBuildSprite("Circle", 32, CircleTex, Vector4.zero);
     public static Sprite RingSprite => LoadOrBuildSprite("CircleRing", 32, CircleRingTex, Vector4.zero);
+    public static Sprite DiamondSprite => LoadOrBuildSprite("Diamond", 32, DiamondTex, Vector4.zero);
+    public static Sprite SquareSprite => LoadOrBuildSprite("Square", 32, SquareTex, Vector4.zero);
     public static Sprite BgGradientSprite => LoadOrBuildGradientSprite();
 
     static Sprite LoadOrBuildGradientSprite()
@@ -112,6 +114,40 @@ public static class UiTheme
                 float inner = Mathf.Clamp01(radius - thickness - d + 0.5f);
                 float a = Mathf.Clamp01(outer - inner);
                 tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        return tex;
+    }
+
+    static Texture2D DiamondTex(int size)
+    {
+        var tex = NewTransparent(size);
+        Vector2 center = new Vector2(size * 0.5f, size * 0.5f);
+        float radius = size * 0.48f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float d = Mathf.Abs(x + 0.5f - center.x) + Mathf.Abs(y + 0.5f - center.y);
+                float a = Mathf.Clamp01(radius - d + 0.5f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        return tex;
+    }
+
+    static Texture2D SquareTex(int size)
+    {
+        var tex = NewTransparent(size);
+        float inset = size * 0.06f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                bool inside = x + 0.5f >= inset && x + 0.5f <= size - inset && y + 0.5f >= inset && y + 0.5f <= size - inset;
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, inside ? 1f : 0f));
             }
         }
         tex.Apply();

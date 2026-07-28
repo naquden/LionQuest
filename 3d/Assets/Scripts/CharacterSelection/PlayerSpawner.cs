@@ -13,6 +13,7 @@ public class PlayerSpawner : MonoBehaviour
     [SerializeField] private GameObject gameControllerPrefab;
     [SerializeField] private CharacterDefinition[] allCharacters = System.Array.Empty<CharacterDefinition>();
     [SerializeField] private PlayerHUD hud;
+    [SerializeField] private PauseMenuController pauseMenu;
 
     private void Start()
     {
@@ -81,6 +82,10 @@ public class PlayerSpawner : MonoBehaviour
         {
             stats.characterID = definition.characterID;
             stats.definition = definition;
+            // Load unlock/soul state now so HUD binding below sees correct skill-lock state —
+            // CharacterStats.Start also calls this later, but Start ordering vs PlayerSpawner's
+            // own Start is unenforced by Unity, so BindPlayer must not depend on it.
+            stats.ReloadFromDisk();
         }
 
         instance.transform.position = point.position;
@@ -96,6 +101,16 @@ public class PlayerSpawner : MonoBehaviour
         }
 
         instance.SetActive(true);
+
+        if (pauseMenu != null)
+        {
+            PlayerInput spawnedInput = instance.GetComponent<PlayerInput>();
+            if (spawnedInput != null) pauseMenu.RegisterPlayer(spawnedInput);
+        }
+        else
+        {
+            Debug.LogError("PlayerSpawner: pauseMenu is not assigned — pause menu will not be able to lock this player's input.");
+        }
 
         if (hud != null)
         {

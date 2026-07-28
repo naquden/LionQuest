@@ -17,22 +17,21 @@ public class CharacterStats : MonoBehaviour
     [Header("Resources")]
     public int souls = 0;
 
-    [Header("Attributes")]
-    public int strengthLevel = 1;
-    public int healthLevel = 1;
-    public int speedLevel = 1;
-
     // Events
     public System.Action<int> OnSoulsChanged;
     public System.Action OnStatsUpgraded;
 
-    // Purchased skill-tree node keys ("skillId/nodeId"). Persisted; the tree itself is not.
+    // Purchased skill-tree node keys ("skillId/nodeId:rank"). Persisted; the tree itself is not.
     private List<string> purchasedSkillNodes = new List<string>();
 
     // Derived per-(skillId, effect) modifiers, rebuilt from purchasedSkillNodes whenever it changes.
     // Never serialized — the tree + purchase set are the only source of truth.
     private Dictionary<(string skillId, SkillEffect effect), (float add, float mul)> resolvedSkillValues
         = new Dictionary<(string, SkillEffect), (float, float)>();
+
+    private int strengthLevel = 1;
+    private int healthLevel = 1;
+    private int speedLevel = 1;
 
     private void Start()
     {
@@ -59,63 +58,12 @@ public class CharacterStats : MonoBehaviour
         }
     }
 
-    // --- Universal Stat Upgrade Logic ---
-
-    public int GetStrengthCost() => strengthLevel * 5;
-    public int GetHealthCost() => healthLevel * 5;
-    public int GetSpeedCost() => speedLevel * 5;
-
     public void AddSouls(int amount)
     {
         souls += amount;
         SaveStats();
         OnSoulsChanged?.Invoke(souls);
         // Debug.Log($"[{characterID}] Gained {amount} Soul(s). Total: {souls}");
-    }
-
-    public bool TryUpgradeStrength()
-    {
-        int cost = GetStrengthCost();
-        if (souls >= cost)
-        {
-            souls -= cost;
-            strengthLevel++;
-            SaveStats();
-            OnStatsUpgraded?.Invoke();
-            OnSoulsChanged?.Invoke(souls);
-            return true;
-        }
-        return false;
-    }
-
-    public bool TryUpgradeHealth()
-    {
-        int cost = GetHealthCost();
-        if (souls >= cost)
-        {
-            souls -= cost;
-            healthLevel++;
-            SaveStats();
-            OnStatsUpgraded?.Invoke();
-            OnSoulsChanged?.Invoke(souls);
-            return true;
-        }
-        return false;
-    }
-
-    public bool TryUpgradeSpeed()
-    {
-        int cost = GetSpeedCost();
-        if (souls >= cost)
-        {
-            souls -= cost;
-            speedLevel++;
-            SaveStats();
-            OnStatsUpgraded?.Invoke();
-            OnSoulsChanged?.Invoke(souls);
-            return true;
-        }
-        return false;
     }
 
     // --- Skill Tree ---
@@ -125,9 +73,9 @@ public class CharacterStats : MonoBehaviour
         return SkillTreeService.IsSkillUnlocked(definition, BuildSaveSnapshot(), skillId);
     }
 
-    public bool IsNodePurchased(string skillId, string nodeId)
+    public int GetNodeRank(string skillId, string nodeId)
     {
-        return purchasedSkillNodes.Contains($"{skillId}/{nodeId}");
+        return SkillTreeService.GetRank(BuildSaveSnapshot(), skillId, nodeId);
     }
 
     public bool CanPurchaseNode(string skillId, string nodeId)
@@ -135,7 +83,8 @@ public class CharacterStats : MonoBehaviour
         return SkillTreeService.CanPurchase(definition, BuildSaveSnapshot(), skillId, nodeId);
     }
 
-    /// <summary>Spends souls, records the purchase, rebuilds the resolved-value cache, saves, and fires events.</summary>
+    /// <summary>Spends souls, advances the node's rank, rebuilds resolved-value/attribute caches,
+    /// saves, and fires events.</summary>
     public bool TryPurchaseNode(string skillId, string nodeId)
     {
         CharacterSaveData snapshot = BuildSaveSnapshot();
@@ -154,8 +103,9 @@ public class CharacterStats : MonoBehaviour
         return true;
     }
 
-    /// <summary>Resolved value for a skill's effect: (SO base + sum of Add nodes) * product of Mul nodes.
-    /// Returns fallback untouched if no purchased node targets this effect.</summary>
+    /// <summary>Resolved value for a skill's effect: (SO base + sum of Add nodes, scaled by rank) *
+    /// product of Mul nodes (scaled by rank). Returns fallback untouched if no purchased node
+    /// targets this effect.</summary>
     public float GetSkillValue(string skillId, SkillEffect effect, float fallback)
     {
         return SkillTreeService.GetValue(resolvedSkillValues, skillId, effect, fallback);
@@ -163,7 +113,11 @@ public class CharacterStats : MonoBehaviour
 
     private void RebuildSkillCache()
     {
-        resolvedSkillValues = SkillTreeService.ResolveSkillValues(definition, BuildSaveSnapshot());
+        CharacterSaveData snapshot = BuildSaveSnapshot();
+        resolvedSkillValues = SkillTreeService.ResolveSkillValues(definition, snapshot);
+        strengthLevel = SkillTreeService.GetAttributeLevel(definition, snapshot, SkillEffect.Strength);
+        healthLevel = SkillTreeService.GetAttributeLevel(definition, snapshot, SkillEffect.Health);
+        speedLevel = SkillTreeService.GetAttributeLevel(definition, snapshot, SkillEffect.Speed);
     }
 
     private CharacterSaveData BuildSaveSnapshot()
@@ -208,9 +162,6 @@ public class CharacterStats : MonoBehaviour
     {
         CharacterSaveData data = new CharacterSaveData(characterID);
         data.souls = souls;
-        data.strengthLevel = strengthLevel;
-        data.healthLevel = healthLevel;
-        data.speedLevel = speedLevel;
         data.purchasedSkillNodes = new List<string>(purchasedSkillNodes);
 
         SaveManager.SaveCharacter(data);
@@ -221,9 +172,6 @@ public class CharacterStats : MonoBehaviour
         CharacterSaveData data = SaveManager.LoadCharacter(characterID);
 
         souls = data.souls;
-        strengthLevel = data.strengthLevel;
-        healthLevel = data.healthLevel;
-        speedLevel = data.speedLevel;
         purchasedSkillNodes = new List<string>(data.purchasedSkillNodes);
 
         RebuildSkillCache();
@@ -237,9 +185,6 @@ public class CharacterStats : MonoBehaviour
     public void ResetStats()
     {
         souls = 0;
-        strengthLevel = 1;
-        healthLevel = 1;
-        speedLevel = 1;
         purchasedSkillNodes.Clear();
         SaveStats();
 

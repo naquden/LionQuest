@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Skill1Attack
   m_EditorClassIdentifier: Assembly-CSharp::AttackData
   attackName: Whirlwind
+  icon: {fileID: 21300000, guid: 73d29a35bc0834665925c7595a0fbe2f, type: 3}
   effectPrefab: {fileID: 3080529120905872376, guid: 55e24e1f13ace46bfaea9b695384cb32, type: 3}
   hitWindowDuration: 0.2
   damage: 120

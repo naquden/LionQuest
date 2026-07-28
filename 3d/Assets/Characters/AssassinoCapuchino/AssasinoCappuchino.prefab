@@ -421,9 +421,6 @@ MonoBehaviour:
   characterID: AssCap
   definition: {fileID: 0}
   souls: 0
-  strengthLevel: 1
-  healthLevel: 1
-  speedLevel: 1
 --- !u!114 &4545922439460293014
 MonoBehaviour:
   m_ObjectHideFlags: 0

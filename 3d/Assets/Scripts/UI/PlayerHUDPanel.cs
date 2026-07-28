@@ -25,13 +25,6 @@ public class PlayerHUDPanel : MonoBehaviour
     [SerializeField] private TMP_Text[] skillSlotLabels = System.Array.Empty<TMP_Text>();
     [SerializeField] private Image[] skillSlotBackgrounds = System.Array.Empty<Image>();
 
-    private static readonly Color BackgroundReadyColor = new Color(0.15f, 0.15f, 0.18f, 0.9f);
-    private static readonly Color BackgroundLockedColor = new Color(0.08f, 0.08f, 0.08f, 0.9f);
-    private static readonly Color IconReadyColor = Color.white;
-    private static readonly Color IconLockedColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-    private static readonly Color BadgeReadyColor = new Color(1f, 1f, 1f, 0.85f);
-    private static readonly Color BadgeLockedColor = new Color(1f, 1f, 1f, 0.35f);
-
     private TopDownPlayerController boundPlayer;
     private CharacterStats boundStats;
     private readonly bool[] slotUnlocked = new bool[SkillSlotCount];
@@ -113,27 +106,31 @@ public class PlayerHUDPanel : MonoBehaviour
         bool unlocked = boundPlayer == null || boundPlayer.IsSkillSlotUnlocked(slot + 1);
         slotUnlocked[slot] = unlocked;
 
+        // The background Image lives on the slot root by construction (PlayerHudGenerator.BuildSkillSlots) —
+        // hiding it hides the whole slot, and the row's HorizontalLayoutGroup closes the gap.
+        if (slot < skillSlotBackgrounds.Length && skillSlotBackgrounds[slot] != null)
+        {
+            skillSlotBackgrounds[slot].gameObject.SetActive(unlocked);
+            skillSlotBackgrounds[slot].color = UiPalette.SurfaceInset;
+        }
+
+        if (!unlocked) return;
+
         if (slot < skillIconImages.Length && skillIconImages[slot] != null)
         {
             skillIconImages[slot].sprite = hasIcon ? icon : null;
             skillIconImages[slot].enabled = hasIcon && icon != null;
-            skillIconImages[slot].color = unlocked ? IconReadyColor : IconLockedColor;
-        }
-
-        if (slot < skillSlotBackgrounds.Length && skillSlotBackgrounds[slot] != null)
-        {
-            skillSlotBackgrounds[slot].color = unlocked ? BackgroundReadyColor : BackgroundLockedColor;
+            skillIconImages[slot].color = Color.white;
         }
 
         if (slot < skillSlotLabels.Length && skillSlotLabels[slot] != null)
         {
-            skillSlotLabels[slot].color = unlocked ? BadgeReadyColor : BadgeLockedColor;
+            skillSlotLabels[slot].color = UiPalette.TextLight;
         }
 
         if (slot < skillCooldownOverlays.Length && skillCooldownOverlays[slot] != null)
         {
-            // Locked slots stay fully covered (static — Update skips them via slotUnlocked).
-            skillCooldownOverlays[slot].fillAmount = unlocked ? 0f : 1f;
+            skillCooldownOverlays[slot].fillAmount = 0f;
         }
     }
 

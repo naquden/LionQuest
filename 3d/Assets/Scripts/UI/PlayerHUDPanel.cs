@@ -22,11 +22,19 @@ public class PlayerHUDPanel : MonoBehaviour
     [Header("Skill slots 1-3")]
     [SerializeField] private Image[] skillIconImages = System.Array.Empty<Image>();
     [SerializeField] private Image[] skillCooldownOverlays = System.Array.Empty<Image>();
-    [SerializeField] private TMP_Text[] skillCooldownTexts = System.Array.Empty<TMP_Text>();
     [SerializeField] private TMP_Text[] skillSlotLabels = System.Array.Empty<TMP_Text>();
+    [SerializeField] private Image[] skillSlotBackgrounds = System.Array.Empty<Image>();
+
+    private static readonly Color BackgroundReadyColor = new Color(0.15f, 0.15f, 0.18f, 0.9f);
+    private static readonly Color BackgroundLockedColor = new Color(0.08f, 0.08f, 0.08f, 0.9f);
+    private static readonly Color IconReadyColor = Color.white;
+    private static readonly Color IconLockedColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+    private static readonly Color BadgeReadyColor = new Color(1f, 1f, 1f, 0.85f);
+    private static readonly Color BadgeLockedColor = new Color(1f, 1f, 1f, 0.35f);
 
     private TopDownPlayerController boundPlayer;
     private CharacterStats boundStats;
+    private readonly bool[] slotUnlocked = new bool[SkillSlotCount];
 
     public void Bind(int playerIndex, TopDownPlayerController player, CharacterStats stats, CharacterDefinition definition)
     {
@@ -59,6 +67,7 @@ public class PlayerHUDPanel : MonoBehaviour
         if (boundStats != null)
         {
             boundStats.OnSoulsChanged += HandleSoulsChanged;
+            boundStats.OnStatsUpgraded += HandleStatsUpgraded;
             HandleSoulsChanged(boundStats.souls);
         }
 
@@ -80,6 +89,7 @@ public class PlayerHUDPanel : MonoBehaviour
         if (boundStats != null)
         {
             boundStats.OnSoulsChanged -= HandleSoulsChanged;
+            boundStats.OnStatsUpgraded -= HandleStatsUpgraded;
             boundStats = null;
         }
 
@@ -100,49 +110,54 @@ public class PlayerHUDPanel : MonoBehaviour
     {
         Sprite icon = null;
         bool hasIcon = boundPlayer != null && boundPlayer.TryGetSkillDisplay(slot + 1, out _, out icon);
+        bool unlocked = boundPlayer == null || boundPlayer.IsSkillSlotUnlocked(slot + 1);
+        slotUnlocked[slot] = unlocked;
 
         if (slot < skillIconImages.Length && skillIconImages[slot] != null)
         {
             skillIconImages[slot].sprite = hasIcon ? icon : null;
             skillIconImages[slot].enabled = hasIcon && icon != null;
+            skillIconImages[slot].color = unlocked ? IconReadyColor : IconLockedColor;
+        }
+
+        if (slot < skillSlotBackgrounds.Length && skillSlotBackgrounds[slot] != null)
+        {
+            skillSlotBackgrounds[slot].color = unlocked ? BackgroundReadyColor : BackgroundLockedColor;
         }
 
         if (slot < skillSlotLabels.Length && skillSlotLabels[slot] != null)
         {
-            bool showNumberPlaceholder = !hasIcon || icon == null;
-            skillSlotLabels[slot].gameObject.SetActive(showNumberPlaceholder);
+            skillSlotLabels[slot].color = unlocked ? BadgeReadyColor : BadgeLockedColor;
         }
 
         if (slot < skillCooldownOverlays.Length && skillCooldownOverlays[slot] != null)
         {
-            skillCooldownOverlays[slot].fillAmount = 0f;
+            // Locked slots stay fully covered (static — Update skips them via slotUnlocked).
+            skillCooldownOverlays[slot].fillAmount = unlocked ? 0f : 1f;
         }
+    }
 
-        if (slot < skillCooldownTexts.Length && skillCooldownTexts[slot] != null)
+    private void HandleStatsUpgraded()
+    {
+        for (int i = 0; i < SkillSlotCount; i++)
         {
-            skillCooldownTexts[slot].gameObject.SetActive(false);
+            BindSkillSlot(i);
         }
     }
 
     private void Update()
     {
-        if (boundPlayer == null) return;
+        if (boundPlayer == null || !boundPlayer.IsAlive) return;
 
         float normalized = boundPlayer.SkillCooldownNormalized;
-        float remaining = boundPlayer.SkillCooldownRemaining;
 
         for (int i = 0; i < SkillSlotCount; i++)
         {
+            if (!slotUnlocked[i]) continue;
+
             if (i < skillCooldownOverlays.Length && skillCooldownOverlays[i] != null)
             {
                 skillCooldownOverlays[i].fillAmount = normalized;
-            }
-
-            if (i < skillCooldownTexts.Length && skillCooldownTexts[i] != null)
-            {
-                bool onCooldown = normalized > 0f;
-                skillCooldownTexts[i].gameObject.SetActive(onCooldown);
-                if (onCooldown) skillCooldownTexts[i].text = remaining.ToString("F1");
             }
         }
     }

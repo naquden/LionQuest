@@ -10,4 +10,5 @@ public class CharacterDefinition : ScriptableObject
     public Sprite portraitLocked;
     public bool unlockedByDefault;
     public GameObject playerPrefab;
+    public SkillTreeDefinition[] skillTrees = System.Array.Empty<SkillTreeDefinition>();
 }

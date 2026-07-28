@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 
 public static class SaveManager
 {
@@ -28,12 +29,7 @@ public static class SaveManager
             existing.strengthLevel = charData.strengthLevel;
             existing.healthLevel = charData.healthLevel;
             existing.speedLevel = charData.speedLevel;
-            existing.skill1DamageLevel = charData.skill1DamageLevel;
-            existing.skill1RadiusLevel = charData.skill1RadiusLevel;
-            existing.skill1CooldownLevel = charData.skill1CooldownLevel;
-            existing.skill2CooldownLevel = charData.skill2CooldownLevel;
-            existing.skill3CooldownLevel = charData.skill3CooldownLevel;
-            existing.unlockedSkills = charData.unlockedSkills;
+            existing.purchasedSkillNodes = new List<string>(charData.purchasedSkillNodes);
         }
         else
         {

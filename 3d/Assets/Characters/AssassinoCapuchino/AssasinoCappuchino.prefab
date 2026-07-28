@@ -419,15 +419,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterStats
   characterID: AssCap
+  definition: {fileID: 0}
   souls: 0
   strengthLevel: 1
   healthLevel: 1
   speedLevel: 1
-  skill1DamageLevel: 1
-  skill1RadiusLevel: 1
-  skill1CooldownLevel: 1
-  skill2CooldownLevel: 1
-  skill3CooldownLevel: 1
 --- !u!114 &4545922439460293014
 MonoBehaviour:
   m_ObjectHideFlags: 0

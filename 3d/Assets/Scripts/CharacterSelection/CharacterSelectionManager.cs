@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
-public enum SlotPhase { Empty, Selecting, Ready }
+public enum SlotPhase { Empty, Selecting, Ready, Upgrading }
 
 public class PlayerSlotState
 {
@@ -11,6 +11,8 @@ public class PlayerSlotState
     public PlayerInput playerInput;
     public int carouselIndex;
     public CharacterDefinition selectedCharacter;
+    // Phase we return to when the upgrade panel closes (Selecting or Ready).
+    public SlotPhase phaseBeforeUpgrade;
 }
 
 /// <summary>
@@ -26,6 +28,7 @@ public class CharacterSelectionManager : MonoBehaviour
     [SerializeField] private CharacterDefinition[] allCharacters = System.Array.Empty<CharacterDefinition>();
     [SerializeField] private GameObject startPrompt;
     [SerializeField] private string gameplaySceneName = "SampleScene";
+    [SerializeField] private SkillTreeScreenController skillTreeScreen;
 
     private readonly PlayerSlotState[] states = new PlayerSlotState[SlotCount];
 
@@ -48,6 +51,7 @@ public class CharacterSelectionManager : MonoBehaviour
     {
         for (int i = 0; i < SlotCount; i++)
         {
+            slots[i].SetPlayerIndex(i);
             slots[i].SetEmpty();
         }
     }
@@ -139,7 +143,71 @@ public class CharacterSelectionManager : MonoBehaviour
         StartGame();
     }
 
+    public void TryOpenUpgrade(int slotIndex)
+    {
+        PlayerSlotState state = states[slotIndex];
+        if (state.phase != SlotPhase.Selecting && state.phase != SlotPhase.Ready) return;
+        if (allCharacters.Length == 0) return;
+        if (skillTreeScreen == null) return;
+        if (states.Any(s => s.phase == SlotPhase.Upgrading)) return; // one shared panel
+
+        CharacterDefinition character = state.phase == SlotPhase.Ready ? state.selectedCharacter : allCharacters[state.carouselIndex];
+        if (!IsUnlocked(character))
+        {
+            slots[slotIndex].FlashLocked();
+            return;
+        }
+
+        state.phaseBeforeUpgrade = state.phase;
+        state.phase = SlotPhase.Upgrading;
+        skillTreeScreen.Open(character, () => CloseUpgrade(slotIndex));
+    }
+
+    // --- Input forwarded to the open skill tree panel while a slot is Upgrading ---
+
+    public void UpgradeNavigate(int slotIndex, int direction)
+    {
+        if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
+        skillTreeScreen.Navigate(direction);
+    }
+
+    public void UpgradeSubmit(int slotIndex)
+    {
+        if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
+        skillTreeScreen.SubmitSelected();
+    }
+
+    public void UpgradeCancel(int slotIndex)
+    {
+        if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
+        skillTreeScreen.Close();
+    }
+
+    public void UpgradeSwitchTab(int slotIndex, int direction)
+    {
+        if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
+        skillTreeScreen.SwitchTab(direction);
+    }
+
+    private void CloseUpgrade(int slotIndex)
+    {
+        PlayerSlotState state = states[slotIndex];
+        if (state.phase != SlotPhase.Upgrading) return;
+
+        state.phase = state.phaseBeforeUpgrade;
+
+        // Souls may have changed — refresh whichever panel is now visible.
+        CharacterDefinition selected = allCharacters.Length > 0 ? allCharacters[state.carouselIndex] : null;
+        if (selected != null)
+        {
+            CharacterSaveData save = SaveManager.LoadCharacter(selected.characterID);
+            slots[slotIndex].UpdateStats(selected, save);
+        }
+    }
+
     private bool CanStartGame() => states.Any(s => s.phase == SlotPhase.Ready);
+
+    public bool IsSlotUpgrading(int slotIndex) => states[slotIndex].phase == SlotPhase.Upgrading;
 
     private void UpdateStartPrompt()
     {

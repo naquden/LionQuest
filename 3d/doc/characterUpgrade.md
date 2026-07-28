@@ -1,13 +1,17 @@
-# Character Upgrade Screen — Implementation Plan
+# Character Upgrade Screen — Skill Tree (redesign in progress)
 
 ## Goal
 
-A screen where a player spends collected **souls** to upgrade a character. Works **identically for every character** (data-driven — AssCap, 67, and any future character with zero code changes). Upgradable:
+A screen where a player spends collected **souls** to upgrade a character. Works **identically for
+every character** (data-driven — AssCap, and any future character with zero code changes).
 
-- **Health** (universal stat)
-- **Strength** (universal stat — damage)
-- **Speed** (universal stat — passive base move speed)
-- **Skills** (per-character, per-skill, and a skill may expose **multiple independent upgrade tracks** — e.g. AssCap Battle Cry upgrades *magnitude* and *duration* separately)
+Upgradable:
+
+- **Attributes** (Strength/Health/Speed) — repeatable `+1` nodes in an `attributes` pseudo-tree, same
+  shape as skill nodes. No separate stat-upgrade UI; levels are **derived** from purchased ranks.
+- **Skills** — per-character, per-skill node graphs. Every skill starts **locked**; its tree's root
+  `Unlock` node must be purchased before the skill can be used or any of its other nodes bought. Nodes
+  are discrete purchases, some **repeatable** (ranked, e.g. `+1 Strength` buyable 5×), some one-shot.
 
 ---
 
@@ -20,301 +24,279 @@ A screen where a player spends collected **souls** to upgrade a character. Works
 
 ---
 
-## Key Decisions (locked — from user)
+## Why this redesign (history)
 
-1. **Speed is a universal passive stat.** Every character has a base move speed; `speedLevel` = permanent move-speed multiplier applied to all characters. Implements the currently-orphaned `GetMoveSpeedMultiplier`.
-2. **Battle Cry (AssCap Skill 3) is a *character-unique skill*, NOT the speed stat.** It temporarily boosts AssCap's move speed for X seconds. It has **two independent, separately-purchasable upgrade tracks**: *magnitude* (how much faster) and *duration* (how many seconds).
-3. **Skills upgrade per-skill, with per-skill multiple tracks.** Generic model: each character declares its skills; each skill declares one or more named upgrade tracks. This supersedes asscap.md's "speedLevel = Battle Cry magnitude" decision (see [Impact on asscap.md](#impact-on-asscapmd)).
-4. **Entry point: in-game pause/menu overlay.** Opened from an in-game menu. *When it may be opened (anytime vs. only between fights) is a gameplay-gating toggle — default: anytime while paused; see [Entry Point](#entry-point).* 
-5. **Data-driven & consistent:** the same screen and code render any character by reading its stats + skill roster. Adding a character = new prefab + definition asset, no upgrade-screen code change.
+The first implementation (tabs per skill, one-shot node purchases, ALL-of prereqs) shipped but failed
+two rounds of review:
 
----
+1. *"Overlay is completely wrong idea… separate screen with no transparency… larger nodes and
+   text… a child should be able to understand this flow."* — fixed: opaque full-screen panel, big
+   text, explicit tab buttons.
+2. Follow-up screenshot showed **the node area rendering completely blank**. Root cause: node prefab
+   used `anchor = (0.5, 0.5)` while `RebuildTree()` positioned nodes as if the container were
+   top-left-anchored — every node landed ~1100px right / ~700px below the masked viewport. Arrow-key
+   cursor movement still worked (proving data/logic were fine), which is why the description panel
+   updated over an apparently empty canvas.
 
-## Current State (verified against code)
+Then reference images set a new bar:
 
-### Stats
-- `CharacterStats.cs`: `strengthLevel`, `healthLevel`, `speedLevel` (all saved). Has `TryUpgradeStrength()`, `TryUpgradeHealth()`, `GetStrengthCost()`, `GetHealthCost()`, `GetDamageMultiplier()`, `GetMaxHealth()`.
-- **Missing:** any speed getter/cost/upgrade. `speedLevel` is saved/loaded but **never applied** (orphaned — `doc/project.md` Known Gaps). `GetMoveSpeedMultiplier` does not exist.
-- `TopDownPlayerController` computes `currentSpeed = moveSpeed * (sprint?…) * groundSpeedMultiplier` (~line 431) — no stat multiplier hooked in.
-
-### Skills
-- `CharacterSaveData.unlockedSkills` = `List<string>` **stub** — saved/loaded, nothing reads or gates on it. No per-skill levels, no skill metadata.
-- Skills today are just ScriptableObject references on `TopDownPlayerController` (`skill2ProjectileData`, `skill3AttackData`/battle-cry). No registry describing "what skills does this character have and how can each be upgraded."
-
-### Roster
-- Two characters: `Assets/Characters/AssassinoCapuchino/` (`characterID: AssCap`) and `Assets/Characters/67/` (`characterID` TBD — the `67.prefab` has a `CharacterAnimator` with Skill2/Skill3 params but its skill data/ID need confirming during impl).
-- `CharacterDefinition` SO is **planned but not yet created** (spec in `characterSelection.md`). This plan **depends on / extends** it.
-
-### UI
-- No `Assets/Scripts/UI/` scripts exist yet. Start screen + selection are also still plans.
+- A **skill-web** reference: circular nodes, rank badges (`0/5`, `3/5`), one colour per branch, links
+  bright only on invested paths, per-branch spent totals, all branches visible from one shared root —
+  no tabs.
+- A **PoE-style hub graph**: one node feeding **many** children (high fan-out), elbow links with
+  diamond junctions, three node tiers (keystone / major / minor), rank badges. Explicitly *not* pure
+  fan-out — *"a good balanced combination"* of hub, chain, and converging shapes.
+- Explicit requirement: attribute points are purchasable, **repeatable** nodes (`+1 Strength`, buyable
+  again for more), and prereqs should allow **more nodes accessible, more nodes skippable** navigating
+  outward — i.e. **ANY**-of prereqs, not ALL-of.
 
 ---
 
-## Design Overview
+## Locked decisions
 
-Three upgrade categories on one screen:
+| Question | Decision |
+|---|---|
+| Layout | **Unified canvas** — every branch visible at once, fanning from one shared root at bottom-centre. No tabs. |
+| Prereq semantics | **ANY-of** — a node unlocks if at least one `prereqNodeIds` entry has rank ≥ 1. Empty = root. Gives multiple routes in and lets a player skip an unwanted intermediate node. |
+| Attributes | Repeatable nodes in an `attributes` tree (`skillSlot = 0`, `target = Attribute`). `strengthLevel`/`healthLevel`/`speedLevel` int save fields are **removed**; levels are derived as `1 + sum(ranks)` of that attribute's nodes. |
+| Rank cost | **Flat** — every rank of a repeatable node costs the node's one authored `cost`. |
+| Node tiers | Three: `Keystone` (large square — a tree's Unlock/root), `Major` (diamond), `Minor` (circle). |
+| Node art | Generator-written PNGs (disc/ring/diamond/square), not hand-authored sprites. |
+| Link style | Elbow segments (horizontal-then-vertical) with a diamond junction. Grey when unbought, branch-coloured once the source node has rank ≥ 1. |
+| Branch colour | Attributes green, Whirlwind blue, Shuriken purple, Battle Cry red. Header shows souls spent per branch. |
+| Graph shape | Each tree mixes **hub** (1→4–5 children, at Keystones and one mid-tree Major), **chain** (linear rank ladders like `cooldown_2s → cooldown_3s`), and **converge** (2–3 prereqs → 1 outer node). Pure fan-out or pure chains are both explicitly rejected. |
+| Effect math | Unchanged: stack modifiers scaled by rank — `(SO base + Σ(Add × rank)) × Π(Mul^rank)`. |
+| Persistence | Only purchased node IDs **with rank** are saved (`"skillId/nodeId:rank"`). The tree (`CharacterDefinition.skillTrees`) stays the sole source of truth for what a node does and how many ranks it has; resolved values (including derived attribute levels) are rebuilt in memory on load/purchase, never serialized. |
+
+Screen shape (character-select panel):
 
 ```
-┌──────────────────────────────────────────────┐
-│  [Portrait]  Assassino Capuchino    Souls: 240 │
-│                                                │
-│  ── Stats ──                                   │
-│  Health    Lv 3   +20 HP      [ Upgrade  15 ] │
-│  Strength  Lv 2   +0.2x dmg   [ Upgrade  10 ] │
-│  Speed     Lv 1   +0% move    [ Upgrade   5 ] │
-│                                                │
-│  ── Skills ──                                  │
-│  Shuriken                                      │
-│    Damage    Lv 1   25 dmg    [ Upgrade  10 ] │
-│  Battle Cry                                    │
-│    Magnitude Lv 1   2.0x      [ Upgrade  10 ] │
-│    Duration  Lv 1   5.0s      [ Upgrade  10 ] │
-│                                                │
-│                                    [ Close ]   │
-└──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ Assassino Capuchino                             Souls: 33    │
+│ ATTRIBUTES 12   WHIRLWIND 35   SHURIKEN 0   BATTLE CRY 0     │
+├───────────────────────────────────────────┬──────────────────┤
+│   (0/5)   (3/5)      (1/1)  (0/1)         │ Cooldown -2s     │
+│    ·        ·          ·      ·           │   1 / 3          │
+│  ╭─┴────────┴─╮      ╭─┴──────┴─╮         │                  │
+│  │  ATTRIB    │      │ WHIRLWIND │        │ Whirlwind is     │
+│  │  ◆ 5/5     │      │  ◆ 12/12  │        │ ready 2 seconds  │
+│  ╰─────┬──────╯      ╰─────┬─────╯        │ sooner.          │
+│        ╰────────┬──────────╯              │                  │
+│              ( YOU )                      │ Cooldown 10s→8s  │
+│                                           │ 15 souls  [BUY]  │
+│ [ Back ]                                  │                  │
+└───────────────────────────────────────────┴──────────────────┘
 ```
-
-Rows are generated from data. Stat rows are the same 3 for every character. Skill rows come from the character's declared skill roster; each skill contributes one row per upgrade track.
 
 ---
 
-## Data Model
+## Data model
 
-### 1. Save format change — `CharacterSaveData` (`SaveDataTypes.cs`)
-
-Replace the `unlockedSkills` stub with a **per-track level dictionary**. `List<string>` is not serializable-friendly for key/value in Unity's `JsonUtility`, so use a serializable list of entries.
+### `SkillTreeTypes.cs` (`Assets/Scripts/SkillTreeTypes.cs`)
 
 ```csharp
+public enum SkillEffect { Unlock, Damage, Cooldown, Area, Duration, Magnitude, ProjectileCount, Strength, Health, Speed }
+public enum SkillEffectOp { Add, Mul }
+public enum SkillNodeTier { Keystone, Major, Minor }
+public enum SkillEffectTarget { Skill, Attribute }
+
 [System.Serializable]
-public class SkillUpgradeEntry
+public class SkillNodeDefinition
 {
-    public string trackId;   // e.g. "shuriken.damage", "battlecry.magnitude", "battlecry.duration"
-    public int level = 1;
+    public string nodeId;
+    public string displayName;
+    public string description;
+    public SkillEffect effect;
+    public SkillEffectOp op = SkillEffectOp.Add;
+    public float value;
+    public int cost = 10;
+    public int maxRank = 1;              // >1 = repeatable (e.g. +1 Strength, 5 ranks)
+    public SkillNodeTier tier = SkillNodeTier.Minor;
+    public string[] prereqNodeIds;       // ANY one satisfies; empty = root
+    public Vector2Int gridPos;           // authored layout position
 }
 
 [System.Serializable]
+public class SkillDisplayBase { public SkillEffect effect; public float baseValue; public string unit; }
+
+[System.Serializable]
+public class SkillTreeDefinition
+{
+    public string skillId;               // "attributes", "whirlwind", "shuriken", "battlecry"
+    public string displayName;
+    public int skillSlot;                // 0 = non-skill (attributes), 1..3 map to skill1/2/3 input
+    public Color branchColor = Color.white;
+    public SkillEffectTarget target = SkillEffectTarget.Skill;
+    public SkillDisplayBase[] displayBases;   // display-only "before" values, sourced from SO assets
+    public SkillNodeDefinition[] nodes;
+}
+```
+
+The root node is the one with `effect == Unlock` (skill trees) or the free marker node with no prereqs
+(`attributes` tree — always reachable, `cost = 0`).
+
+### `CharacterDefinition.cs` (`Assets/Scripts/CharacterSelection/CharacterDefinition.cs`)
+
+Unchanged field: `public SkillTreeDefinition[] skillTrees;` — now includes the `attributes` tree
+alongside the three skill trees.
+
+### Save format (`Assets/Scripts/SaveDataTypes.cs`)
+
+```csharp
 public class CharacterSaveData
 {
     public string characterID;
     public int souls;
 
-    public int strengthLevel = 1;
-    public int healthLevel = 1;
-    public int speedLevel = 1;
-
-    // Per-skill-track levels (replaces the old unlockedSkills stub).
-    public List<SkillUpgradeEntry> skillTracks = new List<SkillUpgradeEntry>();
-
-    public CharacterSaveData(string id)
-    {
-        characterID = id;
-        souls = 0;
-        strengthLevel = 1;
-        healthLevel = 1;
-        speedLevel = 1;
-        skillTracks = new List<SkillUpgradeEntry>();
-    }
+    // "skillId/nodeId:rank" keys, e.g. "attributes/strength_1:3", "battlecry/unlock:1".
+    // Only persisted skill/attribute state — no more strengthLevel/healthLevel/speedLevel fields.
+    public List<string> purchasedSkillNodes = new List<string>();
 }
 ```
 
-> **Migration:** `JsonUtility` tolerates the removed `unlockedSkills` field (old saves just drop it; missing `skillTracks` deserializes to empty → defaults applied). No manual migration code needed. Note the removal in `doc/project.md`.
+`strengthLevel`/`healthLevel`/`speedLevel` are **removed** from the save (and from `CharacterStats`).
+`JsonUtility` drops unknown fields, so old saves simply lose those values on load — consistent with the
+already-accepted rule that skills (and now attributes) start unlocked-from-zero, no grandfathering.
 
-### 2. Skill upgrade metadata — describes tracks generically
+`SaveManager.SaveCharacter` must drop its manual copy of the three level fields onto the cached entry;
+`purchasedSkillNodes` continues to be copied as a fresh `List<string>` (never aliasing the cached
+instance `LoadCharacter` returns).
 
-Each character's skills, and the upgrade tracks each skill exposes, are declared in data so the screen is fully generic. Add to the existing (planned) `CharacterDefinition` SO:
+---
+
+## Runtime resolution
+
+### `SkillTreeService.cs` (`Assets/Scripts/SkillTreeService.cs`)
+
+Stateless rules shared by `CharacterStats` (in-game) and `SkillTreeScreenController` (character-select,
+operates on `CharacterSaveData` directly — no player has spawned yet).
+
+Key methods:
+- `GetRank(save, skillId, nodeId)` — parses the `:rank` suffix, 0 if absent. Replaces the old
+  purchased/not-purchased boolean as the primitive.
+- `ArePrereqsMet` — **ANY**-of: true if any listed prereq has rank ≥ 1 (or the list is empty).
+- `CanPurchase` — prereqs met **and** `GetRank(...) < node.maxRank` **and** enough souls.
+- `TryPurchase` — increments the node's rank (rewrites the `:rank` suffix) rather than appending a new
+  entry.
+- `ResolveSkillValues` — per-`(skillId, effect)` `(add, mul)` totals, each node's contribution scaled by
+  its rank: `add += value * rank`, `mul *= pow(value, rank)`.
+- `GetValue(resolved, skillId, effect, fallback)` — `(fallback + add) * mul`.
+- `GetAttributeLevel(definition, save, effect)` — `1 + Σ(rank)` over nodes in trees with
+  `target == Attribute` matching that effect. This is what replaces `strengthLevel` etc.
+
+### `CharacterStats.cs`
 
 ```csharp
-[System.Serializable]
-public class SkillUpgradeTrack
-{
-    public string trackId;         // stable save key, e.g. "battlecry.magnitude"
-    public string displayName;     // "Magnitude"
-    public int baseCost = 10;      // souls for level 1→2
-    public float costGrowth = 1f;  // cost = baseCost * level * costGrowth (linear like stats)
-    public int maxLevel = 0;       // 0 = uncapped
-}
+public CharacterDefinition definition;   // set by PlayerSpawner before spawn
 
-[System.Serializable]
-public class SkillUpgradeInfo
-{
-    public string skillId;                 // "shuriken", "battlecry"
-    public string displayName;             // "Shuriken", "Battle Cry"
-    public SkillUpgradeTrack[] tracks;     // one or more upgrade tracks
-}
+public bool  IsSkillUnlocked(string skillId);
+public bool  TryPurchaseNode(string skillId, string nodeId);   // rank+souls+prereq check, save, rebuild cache, fire events
+public float GetSkillValue(string skillId, SkillEffect effect, float fallback);
+public float GetDamageMultiplier();       // reads derived Strength level
+public float GetMaxHealth();              // reads derived Health level
+public float GetMoveSpeedMultiplier();    // reads derived Speed level
 ```
 
-`CharacterDefinition` gains:
-```csharp
-public SkillUpgradeInfo[] skills;   // this character's upgradable skills (empty for none)
-```
+`strengthLevel`/`healthLevel`/`speedLevel` fields and `GetStrengthCost`/`GetHealthCost`/`GetSpeedCost`/
+`TryUpgradeStrength`/`TryUpgradeHealth`/`TryUpgradeSpeed` are **deleted** (verified zero callers before
+removal). The three derived levels are cached alongside the resolved skill-value dictionary and rebuilt
+in the same two places: `LoadStats()` and `TryPurchaseNode()` — never per-frame, never serialized.
 
-- **Generic:** the upgrade screen iterates `CharacterDefinition.skills` → for each skill, each track → one row. Zero per-character UI code.
-- AssCap's definition declares: `shuriken` (track `shuriken.damage`) and `battlecry` (tracks `battlecry.magnitude`, `battlecry.duration`).
-- 67 declares its own; future characters just author their definition asset.
+### `TopDownPlayerController.cs`
 
-### 3. Reading/writing track levels
+No changes needed beyond the original implementation — it already routes everything through
+`GetSkillValue`/`IsSkillUnlocked`/`GetMoveSpeedMultiplier`, all of which keep their signatures.
 
-Add to `CharacterStats.cs`:
-```csharp
-public int GetSkillTrackLevel(string trackId)  // returns saved level or 1 if absent
-public int GetSkillTrackCost(SkillUpgradeTrack track)  // track.baseCost * level (linear)
-public bool TryUpgradeSkillTrack(SkillUpgradeTrack track)  // spend souls, ++level, save, fire events
-```
-Backed by the `skillTracks` list on save data (load into a `Dictionary<string,int>` at runtime for O(1); write back on save).
+### `PlayerSlotUI.cs`
+
+`UpdateStats` currently prints `saveData.strengthLevel` etc. directly — switches to
+`SkillTreeService.GetAttributeLevel(character, saveData, SkillEffect.Strength)` (and Health/Speed). No
+signature change; it already receives both the `CharacterDefinition` and `CharacterSaveData`.
 
 ---
 
-## Stat Upgrades — fill the Speed gap
+## UI
 
-`speedLevel` must actually affect movement (currently orphaned). Add to `CharacterStats.cs`:
+### `Assets/Scripts/UI/SkillTreeNodeUI.cs`
 
-```csharp
-public int GetSpeedCost() => speedLevel * 5;
+One node widget: tier-specific frame sprite tinted with the branch colour, name, rank badge (`"3/5"`,
+or a checkmark when maxed at rank 1), cost (fixed to read `"N souls"`, not a bare number). States:
+`Maxed`, `Ranked`, `Affordable`, `Unaffordable`, `Locked`, `Selected` — `Selected` uses a bright
+branch-coloured ring, not a white fill (the previous version painted white-on-white and hid the label).
 
-/// <summary>Passive move-speed multiplier. Lvl 1 = 1.0x, +10% per level.</summary>
-public float GetMoveSpeedMultiplier() => 1f + ((speedLevel - 1) * 0.1f);
+### `Assets/Scripts/UI/SkillTreeScreenController.cs`
 
-public bool TryUpgradeSpeed()
-{
-    int cost = GetSpeedCost();
-    if (souls >= cost)
-    {
-        souls -= cost;
-        speedLevel++;
-        SaveStats();
-        OnStatsUpgraded?.Invoke();
-        OnSoulsChanged?.Invoke(souls);
-        return true;
-    }
-    return false;
-}
-```
+Owns the panel. No tabs — builds and lays out **all** trees at once, each offset from a shared root so
+branches fan outward. Nodes are anchored top-left (fixes the blank-view bug) and the container is sized
+to the true bounds of all spawned nodes, not a fixed oversized guess. Links are elbow segments with a
+diamond junction, coloured per-branch once their source node has rank ≥ 1. Cursor navigation is
+**spatial** (nearest node in the pressed direction), not a walk through a flat sorted list. Clicking
+still only *selects* a node — a separate Buy button spends souls, and re-buying a ranked node advances
+it to the next rank. The info panel shows the node's plain-language description, a rank line, and a
+before→after value line (e.g. `Cooldown 10s → 8s`) sourced from the tree's `displayBases`.
 
-Apply in `TopDownPlayerController.HandleMovement()` where `currentSpeed` is built:
-```csharp
-float speedStatMult = characterStats != null ? characterStats.GetMoveSpeedMultiplier() : 1f;
-currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f)
-             * groundSpeedMultiplier * speedStatMult /* * battleCrySpeedMultiplier */;
-```
-(Battle Cry buff multiplier — from asscap.md — multiplies on top of this; the two are independent.)
-
-`OnStatsUpgraded` already re-reads max health & damage in `UpdateStatsFromUpgrade()`. Move speed is read live each frame, so no extra wiring needed for it to take effect.
+**Entry point**: unchanged — `CharacterSelectionManager`'s `SlotPhase.Upgrading` phase, opened via the
+`UI/Upgrade` action (gamepad North / keyboard Tab). `UpgradeSwitchTab` is removed (no tabs); Navigate
+now forwards both axes into the panel's spatial cursor movement instead of one axis driving tab
+switching.
 
 ---
 
-## Impact on asscap.md
+## Editor generator
 
-asscap.md currently says **"Battle Cry magnitude uses `speedLevel`"**. That conflicts with this plan (speedLevel is now the universal passive move-speed stat). **Reconcile:**
+`Assets/Editor/SkillTreeScreenGenerator.cs` — `[MenuItem("LionQuest/Generate/Upgrade Screen")]` +
+`public static void Generate()`. `AgentBatch.cs` already dispatches `UpgradeScreen` to this menu path.
 
-- Battle Cry magnitude & duration are **skill tracks** (`battlecry.magnitude`, `battlecry.duration`), not `speedLevel`.
-- `BattleCrySkillData` keeps `duration`/`cooldown` as **base** values; runtime reads track levels for the *actual* magnitude & duration:
-  - magnitude = `2 + (battlecry.magnitude level - 1) * 0.25`
-  - duration = `baseDuration + (battlecry.duration level - 1) * 1s`
-- `CharacterStats.GetBattleCryMultiplier()` (proposed in asscap.md) becomes `GetSkillTrackLevel("battlecry.magnitude")`-driven; drop the `speedLevel` coupling and the `TryUpgradeSpeed`-as-battle-cry idea.
-- `speedLevel` → passive move speed (this plan). asscap.md's "removes speedLevel from orphaned list" note still holds — just for a different reason.
+Generates: node-tier sprites (disc/ring/diamond/square + link-junction diamond) written as PNGs the
+same way `TerrainContentGenerator` writes ground textures; a single node prefab whose sprite/size swap
+by tier; an elbow-link prefab with a junction; the panel prefab (opaque background, branch-total
+header, unified scrollable node canvas, info panel, Buy, Back — no tab row); wires the panel into
+`CharacterSelection.unity` (idempotent); authors AssCap's four trees (`attributes`, `whirlwind`,
+`shuriken`, `battlecry`) onto `AssCap_Definition.asset`, each mixing hub/chain/converge node shapes and
+populating `displayBases` from the real `Skill1Attack.asset`/`ShurikenProjectile.asset`/
+`BattleCry.asset` values.
 
-> **Action:** when implementing, update asscap.md Parts 2b/2c and its Decisions #2–#4 to point at skill tracks. Flag both docs touch `CharacterStats` — implement in one pass.
-
----
-
-## Entry Point
-
-In-game pause overlay. Opened from an in-game menu (pause). Details:
-
-- A `UI` action (e.g. `Menu`/`Start` button — same one the input-asset work in `characterSelection.md` adds) toggles a pause overlay Canvas in the gameplay scene.
-- Overlay pauses gameplay (`Time.timeScale = 0`) while open. Upgrade screen is one panel of that overlay.
-- **Which character?** In gameplay the active player(s) exist — the screen targets the local player's `CharacterStats`. For multiple local players, one upgrade panel per player (or the opener's). MVP: single active player's stats.
-- **Gating toggle:** `bool allowUpgradeAnytime` on the menu controller. `true` (default) = open anytime paused. `false` = only when a "between fights" flag is set (future wave/level system). Left as a config bool so the decision can be deferred without a redesign.
-
-> This overlay reuses the same `SaveManager`/`CharacterStats` already live on the player — no scene load, no data carrier needed.
+`AgentBatch.DiagnoseSkillTree()` is extended to dump each spawned node's **computed on-screen rect** and
+assert it falls inside the viewport bounds — a machine check for the exact blank-view regression seen
+in review, not just node/tree counts.
 
 ---
 
-## New Runtime Scripts
+## Authored AssCap trees
 
-`Assets/Scripts/UI/`:
+**attributes** (slot 0, green, `target = Attribute`) — free always-reachable root; `strength_1`/
+`health_1`/`speed_1` each `+1`, 5 ranks, 10 souls/rank, hanging off the root; each also feeds an outer
+Major node (`strength_2` etc.) for a pricier, bigger jump — 3 ranks, 25 souls/rank.
 
-| Script | Role |
-|---|---|
-| `UpgradeScreenController.cs` | Builds/refreshes all rows for a target `CharacterStats` + `CharacterDefinition`. Handles Close. Subscribes to `OnSoulsChanged`/`OnStatsUpgraded` to live-refresh. |
-| `UpgradeRowUI.cs` | One row: label, level, current-effect text, cost, Upgrade button. Bound to a stat kind OR a skill track via a small `UpgradeTarget` abstraction. |
-| `PauseMenuController.cs` | Toggles pause overlay, `Time.timeScale`, holds `allowUpgradeAnytime`, opens `UpgradeScreenController` for the active player. |
-
-`UpgradeTarget` abstraction (keeps rows generic over stats vs. skill tracks):
-```csharp
-public abstract class UpgradeTarget
-{
-    public abstract string Label { get; }
-    public abstract int Level { get; }
-    public abstract int Cost { get; }
-    public abstract string EffectText { get; }
-    public abstract bool TryUpgrade();
-    public virtual bool IsMaxed => false;
-}
-// StatUpgradeTarget (Health/Strength/Speed) + SkillTrackUpgradeTarget wrap CharacterStats calls.
-```
-
-Row build order: 3 stat targets, then for each `CharacterDefinition.skills` → for each track → a `SkillTrackUpgradeTarget`.
+**whirlwind** (slot 1, blue), **shuriken** (slot 2, purple), **battlecry** (slot 3, red) — each an
+`Unlock` Keystone with 4–5 children (hub), incremental rank ladders like `cooldown_2s → cooldown_3s`
+(chain), and outer nodes requiring any one of 2–3 inner prereqs (converge). Base values sourced from
+`Skill1Attack.asset` (cooldown 10), `ShurikenProjectile.asset` (cooldown 2, damage 25), `BattleCry.asset`
+(duration 5, cooldown 10).
 
 ---
 
-## Editor Generator
+## Acceptance criteria
 
-`Assets/Editor/UpgradeScreenGenerator.cs` — `[MenuItem("LionQuest/Generate/Upgrade Screen")]`. Per project convention (code-generated, no manual editor steps). Builds:
+- [ ] Skill tree graph is fully visible on open — no node falls outside the viewport (machine-checked
+      via `AgentBatch.DiagnoseSkillTree`, not eyeballed).
+- [ ] All four branches (attributes + 3 skills) render simultaneously from one shared root; no tabs.
+- [ ] A repeatable node (e.g. `+1 Strength`) can be purchased multiple times up to its `maxRank`; badge
+      shows current/max rank; cost is flat per rank.
+- [ ] A node with 2+ prereqs unlocks once **any one** is purchased — the other prereq path remains
+      buyable independently (proves ANY-of, not ALL-of).
+- [ ] Every skill starts locked; basic attack always works so a fresh character can farm souls.
+- [ ] Attribute levels (Strength/Health/Speed) are correct with **zero** `*Level` fields in the save —
+      derived purely from purchased node ranks.
+- [ ] Buying/ranking a node spends souls, persists (`purchasedSkillNodes` with rank suffix), and every
+      dependent value re-resolves live via `OnStatsUpgraded`/cache rebuild.
+- [ ] Info panel shows a plain-language description plus a before→after value for skill nodes.
+- [ ] Old saves (previous `purchasedSkillNodes` without rank suffix, or with removed `*Level` fields)
+      load without error — by design, no grandfathering; skills/attributes start at zero ranks.
 
-1. `UpgradeScreenCanvas.prefab` (`Assets/Prefabs/UI/`): Canvas (Screen Space-Overlay) + CanvasScaler (1920×1080, match 0.5) + GraphicRaycaster; header (portrait Image, name TMP, souls TMP); a `VerticalLayoutGroup` "Stats" section; a `VerticalLayoutGroup` "Skills" section; a reusable `UpgradeRow.prefab`; Close button. Wire `UpgradeScreenController` refs in code (`SerializedObject`).
-2. `UpgradeRow.prefab`: label TMP, level TMP, effect TMP, cost TMP, Button + TMP; `UpgradeRowUI` component.
-3. Pause overlay wiring into the gameplay scene: the generator instantiates the `PauseMenuController` + overlay Canvas into the gameplay scene (`SampleScene`) and saves it via `EditorSceneManager`. Scene edits are now allowed for agents (see CLAUDE.md / `.cursorrules`), so this is done in code — no manual drag step.
+## Out of scope
 
-Key APIs: `PrefabUtility.SaveAsPrefabAsset`, `ObjectFactory`, `DefaultControls`/TMP, `AssetDatabase`, `SerializedObject`, `EditorSceneManager`.
-
----
-
-## New Assets
-
-| Asset | Path | Created by |
-|---|---|---|
-| `UpgradeScreenCanvas.prefab` | `Assets/Prefabs/UI/` | Generator |
-| `UpgradeRow.prefab` | `Assets/Prefabs/UI/` | Generator |
-| `AssCap` skill metadata | on `AssCap_Definition.asset` (`skills[]`) | Generator / edit |
-| `67` skill metadata | on `67_Definition.asset` | Generator / edit |
-
-Depends on `CharacterDefinition` existing (`characterSelection.md`). If selection feature not yet implemented, this plan's generator must also create the `CharacterDefinition.cs` script (shared dependency) — implement selection first, or share the SO.
-
----
-
-## Implementation Order
-
-1. **Save format:** add `SkillUpgradeEntry` + `skillTracks`, remove `unlockedSkills` in `SaveDataTypes.cs`.
-2. **CharacterStats:** speed (`GetSpeedCost`/`GetMoveSpeedMultiplier`/`TryUpgradeSpeed`) + skill-track methods (`GetSkillTrackLevel`/`GetSkillTrackCost`/`TryUpgradeSkillTrack`).
-3. **TopDownPlayerController:** apply `GetMoveSpeedMultiplier()` in `currentSpeed`.
-4. **CharacterDefinition:** add `SkillUpgradeInfo[] skills` (+ `SkillUpgradeTrack`, `SkillUpgradeInfo` types). (Create the SO if selection feature not done yet.)
-5. **Reconcile asscap.md:** Battle Cry reads skill tracks, not `speedLevel`.
-6. **UI runtime:** `UpgradeTarget` + subclasses, `UpgradeRowUI`, `UpgradeScreenController`, `PauseMenuController`.
-7. **Generator:** `UpgradeScreenGenerator.cs`, build prefabs.
-8. **Author skill metadata** on AssCap (+ 67) definitions.
-9. Hook pause overlay into gameplay scene (generator writes it into the scene via `EditorSceneManager`).
-10. Playtest each upgrade path; update `doc/project.md` Known Gaps.
-
----
-
-## Acceptance Criteria
-
-- [ ] Screen renders Health/Strength/Speed rows for **any** character with no per-character code.
-- [ ] Skill rows are generated from `CharacterDefinition.skills`; AssCap shows Shuriken(Damage), Battle Cry(Magnitude), Battle Cry(Duration).
-- [ ] Each Upgrade button spends the shown souls, increments the level, updates effect text + souls display live, and persists (survives restart).
-- [ ] Speed upgrade increases passive move speed for every character (visible in play).
-- [ ] Battle Cry magnitude & duration upgrade **independently** (buy one without the other).
-- [ ] Buttons disable/grey when souls insufficient or track maxed.
-- [ ] Opening the screen pauses gameplay; closing resumes.
-- [ ] Old saves (with `unlockedSkills`) load without error.
-
----
-
-## Out of Scope
-
-- Souls economy balancing (costs are linear placeholders).
+- Souls economy balancing (authored node costs are placeholders).
 - Refund / respec.
-- Skill *unlock* gating (all declared tracks upgradable from lvl 1; locking behind unlock is future).
-- Wave/level "between fights" gating logic (only the `allowUpgradeAnytime` toggle is stubbed).
-- Controller navigation polish beyond default `InputSystemUIInputModule` focus.
+- In-game pause-menu entry point (character-select panel covers "unlock before the run").
+- Hand-authored node icon art (generator-written primitive shapes stand in for now).

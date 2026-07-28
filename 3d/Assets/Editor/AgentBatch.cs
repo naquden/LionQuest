@@ -63,6 +63,9 @@ public static class AgentBatch
                 case "GenerateMap":
                     RunMapGenerator();
                     break;
+                case "CaptureSelection":
+                    CaptureCharacterSelection();
+                    break;
                 default:
                     // Try as a full menu path
                     InvokeGeneratorMenu(target);
@@ -287,6 +290,259 @@ public static class AgentBatch
         }
 
         Report(OK, "diagnose player hud done");
+    }
+
+    /// <summary>
+    /// Dumps spawn-point world position, MapGenerator terrain params, and the terrain
+    /// surface height sampled under each spawn point, so a buried-spawn theory can be
+    /// confirmed or refuted before touching spawn code.
+    /// Usage: -executeMethod AgentBatch.DiagnoseSkillSpawnGeometry
+    /// </summary>
+    public static void DiagnoseSkillSpawnGeometry()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        PlayerSpawner spawner = null;
+        MapGenerator generator = null;
+        Terrain terrain = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (spawner == null) spawner = root.GetComponentInChildren<PlayerSpawner>(true);
+            if (generator == null) generator = root.GetComponentInChildren<MapGenerator>(true);
+            if (terrain == null) terrain = root.GetComponentInChildren<Terrain>(true);
+        }
+
+        if (generator != null)
+        {
+            var genSo = new SerializedObject(generator);
+            string[] fields = { "mapSize", "terrainHeight", "flatTerrain", "heightAmplitude",
+                "islandRadius", "oceanDepth", "beachWidth" };
+            foreach (var f in fields)
+            {
+                var p = genSo.FindProperty(f);
+                Debug.Log($"DIAG|mapGenerator.{f}={(p != null ? PropVal(p) : "MISSING")}");
+            }
+        }
+        else
+        {
+            Debug.Log("DIAG|mapGenerator=MISSING");
+        }
+
+        if (terrain != null)
+        {
+            Debug.Log($"DIAG|terrain.transform.position={terrain.transform.position}");
+        }
+        else
+        {
+            Debug.Log("DIAG|terrain=MISSING");
+        }
+
+        if (spawner != null)
+        {
+            var spawnerSo = new SerializedObject(spawner);
+            var spawnPointsProp = spawnerSo.FindProperty("spawnPoints");
+            int count = spawnPointsProp.arraySize;
+            Debug.Log($"DIAG|spawnPointCount={count}");
+
+            for (int i = 0; i < count; i++)
+            {
+                Transform point = spawnPointsProp.GetArrayElementAtIndex(i).objectReferenceValue as Transform;
+                if (point == null)
+                {
+                    Debug.Log($"DIAG|spawnPoint[{i}]=MISSING");
+                    continue;
+                }
+
+                Vector3 pos = point.position;
+                float surfaceY = terrain != null ? terrain.SampleHeight(pos) + terrain.transform.position.y : float.NaN;
+                Debug.Log($"DIAG|spawnPoint[{i}].position={pos} terrainSurfaceY={surfaceY:F2}");
+            }
+
+            // SpawnPlayer falls back to the spawner's own transform when spawnPoints is short.
+            Vector3 fallbackPos = spawner.transform.position;
+            float fallbackSurfaceY = terrain != null ? terrain.SampleHeight(fallbackPos) + terrain.transform.position.y : float.NaN;
+            Debug.Log($"DIAG|spawnerTransform.position={fallbackPos} terrainSurfaceY={fallbackSurfaceY:F2}");
+        }
+        else
+        {
+            Debug.Log("DIAG|spawnPointCount=0 (no PlayerSpawner found)");
+        }
+
+        GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/Characters/AssassinoCapuchino/AssasinoCappuchino.prefab");
+        if (playerPrefab != null)
+        {
+            var controller = playerPrefab.GetComponentInChildren<TopDownPlayerController>(true);
+            if (controller != null)
+            {
+                var ctrlSo = new SerializedObject(controller);
+                Debug.Log($"DIAG|player.groundLevel={PropVal(ctrlSo.FindProperty("groundLevel"))}");
+            }
+        }
+
+        ProjectileSkillData shuriken = AssetDatabase.LoadAssetAtPath<ProjectileSkillData>(
+            "Assets/Characters/AssassinoCapuchino/ShurikenProjectile.asset");
+        Debug.Log(shuriken != null
+            ? $"DIAG|shuriken.spawnOffset={shuriken.spawnOffset}"
+            : "DIAG|shuriken=MISSING");
+
+        Report(OK, "diagnose skill spawn geometry done");
+    }
+
+    public static void DiagnoseSkillTree()
+    {
+        const string scenePath = "Assets/Scenes/CharacterSelection.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        SkillTreeScreenController panel = null;
+        CharacterSelectionManager manager = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (panel == null) panel = root.GetComponentInChildren<SkillTreeScreenController>(true);
+            if (manager == null) manager = root.GetComponentInChildren<CharacterSelectionManager>(true);
+        }
+
+        Debug.Log($"DIAG|panel={(panel != null ? panel.gameObject.name : "MISSING")}");
+
+        if (manager != null)
+        {
+            var so = new SerializedObject(manager);
+            var screenRef = so.FindProperty("skillTreeScreen").objectReferenceValue;
+            Debug.Log($"DIAG|managerSkillTreeScreen={(screenRef != null ? screenRef.name : "MISSING")}");
+        }
+        else
+        {
+            Debug.Log("DIAG|managerSkillTreeScreen=MISSING (no CharacterSelectionManager found)");
+        }
+
+        const string assCapDefinitionPath = "Assets/Characters/AssassinoCapuchino/AssCap_Definition.asset";
+        var def = AssetDatabase.LoadAssetAtPath<CharacterDefinition>(assCapDefinitionPath);
+        if (def == null)
+        {
+            Debug.Log("DIAG|assCapSkillTrees=MISSING (no CharacterDefinition asset)");
+        }
+        else
+        {
+            Debug.Log($"DIAG|assCapSkillTreeCount={(def.skillTrees != null ? def.skillTrees.Length : 0)}");
+            if (def.skillTrees != null)
+            {
+                foreach (var tree in def.skillTrees)
+                {
+                    Debug.Log($"DIAG|tree={tree.skillId} slot={tree.skillSlot} nodes={(tree.nodes != null ? tree.nodes.Length : 0)}");
+                }
+            }
+        }
+
+        Report(OK, "diagnose skill tree done");
+    }
+
+    /// <summary>
+    /// Renders CharacterSelection.unity's overlay canvas into 1920x1080 PNGs for each
+    /// PlayerSlotUI state (Empty/Selecting/Ready) so an agent can inspect the actual layout
+    /// without a display. Needs a real graphics context — run via
+    /// "sh tools/unity-batch.sh RunGenerator CaptureSelection graphics" (drops -nographics).
+    /// </summary>
+    static void CaptureCharacterSelection()
+    {
+        const string scenePath = "Assets/Scenes/CharacterSelection.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        Canvas canvas = null;
+        CharacterSelectionManager manager = null;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (canvas == null) canvas = root.GetComponentInChildren<Canvas>(true);
+            if (manager == null) manager = root.GetComponentInChildren<CharacterSelectionManager>(true);
+        }
+
+        if (canvas == null || manager == null)
+            throw new Exception("CaptureCharacterSelection: missing Canvas or CharacterSelectionManager in CharacterSelection.unity");
+
+        var managerSo = new SerializedObject(manager);
+        var slotsProp = managerSo.FindProperty("slots");
+        var slots = new PlayerSlotUI[slotsProp.arraySize];
+        for (int i = 0; i < slots.Length; i++)
+            slots[i] = slotsProp.GetArrayElementAtIndex(i).objectReferenceValue as PlayerSlotUI;
+
+        var rosterProp = managerSo.FindProperty("allCharacters");
+        var roster = new CharacterDefinition[rosterProp.arraySize];
+        for (int i = 0; i < roster.Length; i++)
+            roster[i] = rosterProp.GetArrayElementAtIndex(i).objectReferenceValue as CharacterDefinition;
+
+        if (slots.Length == 0 || slots[0] == null || roster.Length == 0)
+            throw new Exception("CaptureCharacterSelection: no slots or no roster wired.");
+
+        var captureCameraGo = new GameObject("CaptureCamera", typeof(Camera));
+        Camera captureCamera = captureCameraGo.GetComponent<Camera>();
+        captureCamera.clearFlags = CameraClearFlags.SolidColor;
+        captureCamera.backgroundColor = Color.black;
+        // ScreenSpaceCamera canvas rendering requires the canvas's own layer in cullingMask —
+        // restrict to just that layer so no world-space object (e.g. a per-slot preview rig
+        // sitting at its world offset) composites into the shot alongside the UI.
+        captureCamera.cullingMask = 1 << canvas.gameObject.layer;
+
+        RenderMode originalMode = canvas.renderMode;
+        Camera originalWorldCamera = canvas.worldCamera;
+        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        canvas.worldCamera = captureCamera;
+
+        var rt = new RenderTexture(1920, 1080, 24, RenderTextureFormat.ARGB32);
+        captureCamera.targetTexture = rt;
+
+        for (int i = 0; i < slots.Length; i++)
+        {
+            if (slots[i] != null) slots[i].SetPlayerIndex(i);
+        }
+
+        CharacterPreviewStage previewStage = slots[0].GetComponentInChildren<CharacterPreviewStage>(true);
+
+        CharacterSaveData save0 = SaveManager.LoadCharacter(roster[0].characterID);
+
+        slots[0].SetEmpty();
+        CaptureToPng(captureCamera, rt, "shot-empty.png");
+
+        slots[0].SetSelecting(roster, 0, d => d.unlockedByDefault, save0);
+        // Outside Play mode nothing drives previewCamera's render loop — force one frame so
+        // the RenderTexture the RawImage reads from isn't still blank white.
+        if (previewStage != null) previewStage.RenderNow();
+        CaptureToPng(captureCamera, rt, "shot-selecting.png");
+
+        slots[0].SetReady(roster[0]);
+        if (previewStage != null) previewStage.RenderNow();
+        CaptureToPng(captureCamera, rt, "shot-ready.png");
+
+        slots[0].SetEmpty();
+        canvas.renderMode = originalMode;
+        canvas.worldCamera = originalWorldCamera;
+        captureCamera.targetTexture = null;
+        rt.Release();
+        UnityEngine.Object.DestroyImmediate(rt);
+        UnityEngine.Object.DestroyImmediate(captureCameraGo);
+
+        Report(OK, "capture character selection done");
+    }
+
+    static void CaptureToPng(Camera camera, RenderTexture rt, string fileName)
+    {
+        camera.Render();
+
+        RenderTexture previousActive = RenderTexture.active;
+        RenderTexture.active = rt;
+        var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
+        tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+        tex.Apply();
+        RenderTexture.active = previousActive;
+
+        string dir = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Logs");
+        System.IO.Directory.CreateDirectory(dir);
+        string path = System.IO.Path.Combine(dir, fileName);
+        System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
+        UnityEngine.Object.DestroyImmediate(tex);
+
+        Debug.Log($"CAPTURE|{path}");
     }
 
     static void RunMapGenerator()

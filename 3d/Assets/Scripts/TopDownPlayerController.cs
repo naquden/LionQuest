@@ -132,6 +132,15 @@ public class TopDownPlayerController : MonoBehaviour
     public float SkillCooldownNormalized =>
         skillLockDuration <= 0f ? 0f : Mathf.Clamp01(SkillCooldownRemaining / skillLockDuration);
 
+    /// <summary>False when slot 1..3 is bound to a skill tree whose root Unlock node isn't purchased.
+    /// True when unlocked, or when the slot has no tree binding (matches HandleSkills' gate).</summary>
+    public bool IsSkillSlotUnlocked(int slot)
+    {
+        string skillId = SkillIdForSlot(slot);
+        if (characterStats == null || skillId == null) return true;
+        return characterStats.IsSkillUnlocked(skillId);
+    }
+
     /// <summary>HUD display data for skill slot 1..3. Returns false if the slot is unassigned.</summary>
     public bool TryGetSkillDisplay(int slot, out string displayName, out Sprite icon)
     {
@@ -506,7 +515,8 @@ public class TopDownPlayerController : MonoBehaviour
         }
         
         // Calculate movement speed
-        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier * battleCrySpeedMultiplier;
+        float speedStatMultiplier = characterStats != null ? characterStats.GetMoveSpeedMultiplier() : 1f;
+        currentSpeed = moveSpeed * (isSprinting ? sprintMultiplier : 1f) * groundSpeedMultiplier * speedStatMultiplier * battleCrySpeedMultiplier;
         
         // Convert 2D input to 3D movement on X-Z plane
         // Reset moveDirection first to ensure clean state
@@ -682,11 +692,26 @@ public class TopDownPlayerController : MonoBehaviour
     /// <summary>True if any skill is currently locked out by the global skill-lock cooldown.</summary>
     private bool SkillsLocked => Time.time < skillLockUntilTime;
 
-    /// <summary>Start the global skill lock using skillIndex's stat-scaled cooldown.</summary>
-    private void LockSkills(int skillIndex, float baseCooldown)
+    /// <summary>Skill id (from the character's skill tree) bound to input slot 1/2/3, or null if none declared.</summary>
+    private string SkillIdForSlot(int slot)
     {
-        float mult = characterStats != null ? characterStats.GetSkillCooldownMultiplier(skillIndex) : 1f;
-        skillLockDuration = baseCooldown * mult;
+        if (characterStats == null || characterStats.definition == null || characterStats.definition.skillTrees == null)
+        {
+            return null;
+        }
+        foreach (SkillTreeDefinition tree in characterStats.definition.skillTrees)
+        {
+            if (tree.skillSlot == slot) return tree.skillId;
+        }
+        return null;
+    }
+
+    /// <summary>Start the global skill lock using skillId's tree-resolved cooldown (falls back to baseCooldown).</summary>
+    private void LockSkills(string skillId, float baseCooldown)
+    {
+        skillLockDuration = (characterStats != null && skillId != null)
+            ? characterStats.GetSkillValue(skillId, SkillEffect.Cooldown, baseCooldown)
+            : baseCooldown;
         skillLockUntilTime = Time.time + skillLockDuration;
     }
 
@@ -698,10 +723,17 @@ public class TopDownPlayerController : MonoBehaviour
         // Check if skill buttons were pressed this frame
         if (skill1Action != null && skill1Action.WasPressedThisFrame())
         {
+            string skillId = SkillIdForSlot(1);
+            if (characterStats != null && skillId != null && !characterStats.IsSkillUnlocked(skillId))
+            {
+                Debug.Log($"[Player] Skill 1 ({skillId}) is locked — purchase its Unlock node in the skill tree.");
+                return; // locked — not yet purchased in the skill tree
+            }
+
             if (combatController != null && skill1AttackData != null && basicAttackData != null)
             {
-                float dmgMult = characterStats != null ? characterStats.GetSkill1DamageMultiplier() : 2f;
-                float radius = characterStats != null ? characterStats.GetSkill1Radius() : 3f;
+                float dmgMult = characterStats != null ? characterStats.GetSkillValue(skillId, SkillEffect.Damage, 2f) : 2f;
+                float radius = characterStats != null ? characterStats.GetSkillValue(skillId, SkillEffect.Area, 3f) : 3f;
 
                 if (characterAnimator != null)
                 {
@@ -714,7 +746,7 @@ public class TopDownPlayerController : MonoBehaviour
                     radius,
                     bypassCooldown: true);
 
-                LockSkills(1, skill1BaseCooldown);
+                LockSkills(skillId, skill1BaseCooldown);
             }
             else
             {
@@ -725,8 +757,15 @@ public class TopDownPlayerController : MonoBehaviour
 
         if (skill2Action != null && skill2Action.WasPressedThisFrame())
         {
+            string skillId = SkillIdForSlot(2);
+            if (characterStats != null && skillId != null && !characterStats.IsSkillUnlocked(skillId))
+            {
+                Debug.Log($"[Player] Skill 2 ({skillId}) is locked — purchase its Unlock node in the skill tree.");
+                return; // locked — not yet purchased in the skill tree
+            }
+
             // Check if using projectile skill (e.g., shuriken throw)
-            if (skill2ProjectileData != null)
+            if (skill2ProjectileData != null && skill2ProjectileData.projectilePrefab != null)
             {
                 if (characterAnimator != null)
                 {
@@ -736,7 +775,7 @@ public class TopDownPlayerController : MonoBehaviour
                 // Start timed projectile spawning
                 StartCoroutine(SpawnProjectilesAtTimes(skill2ProjectileData));
 
-                LockSkills(2, skill2ProjectileData.cooldown);
+                LockSkills(skillId, skill2ProjectileData.cooldown);
             }
             else
             {
@@ -749,7 +788,7 @@ public class TopDownPlayerController : MonoBehaviour
                 if (combatController != null && skill2AttackData != null)
                 {
                     combatController.PerformAttack(skill2AttackData, bypassCooldown: true);
-                    LockSkills(2, skill2AttackData.cooldown);
+                    LockSkills(skillId, skill2AttackData.cooldown);
                 }
             }
             return;
@@ -757,6 +796,13 @@ public class TopDownPlayerController : MonoBehaviour
 
         if (skill3Action != null && skill3Action.WasPressedThisFrame())
         {
+            string skillId = SkillIdForSlot(3);
+            if (characterStats != null && skillId != null && !characterStats.IsSkillUnlocked(skillId))
+            {
+                Debug.Log($"[Player] Skill 3 ({skillId}) is locked — purchase its Unlock node in the skill tree.");
+                return; // locked — not yet purchased in the skill tree
+            }
+
             if (skill3BattleCryData != null)
             {
                 // Battle Cry self-buff (global skill lock gates re-use, no self-stacking)
@@ -766,9 +812,9 @@ public class TopDownPlayerController : MonoBehaviour
                 }
 
                 if (battleCryRoutine != null) StopCoroutine(battleCryRoutine);
-                battleCryRoutine = StartCoroutine(BattleCryRoutine(skill3BattleCryData));
+                battleCryRoutine = StartCoroutine(BattleCryRoutine(skill3BattleCryData, skillId));
 
-                LockSkills(3, skill3BattleCryData.cooldown);
+                LockSkills(skillId, skill3BattleCryData.cooldown);
             }
             else
             {
@@ -781,16 +827,17 @@ public class TopDownPlayerController : MonoBehaviour
                 if (combatController != null && skill3AttackData != null)
                 {
                     combatController.PerformAttack(skill3AttackData, bypassCooldown: true);
-                    LockSkills(3, skill3AttackData.cooldown);
+                    LockSkills(skillId, skill3AttackData.cooldown);
                 }
             }
             return;
         }
     }
 
-    private IEnumerator BattleCryRoutine(BattleCrySkillData data)
+    private IEnumerator BattleCryRoutine(BattleCrySkillData data, string skillId)
     {
-        float mult = characterStats != null ? characterStats.GetBattleCryMultiplier() : 2f;
+        float mult = characterStats != null ? characterStats.GetSkillValue(skillId, SkillEffect.Magnitude, 2f) : 2f;
+        float duration = characterStats != null ? characterStats.GetSkillValue(skillId, SkillEffect.Duration, data.duration) : data.duration;
 
         if (data.activateEffectPrefab != null)
         {
@@ -798,9 +845,9 @@ public class TopDownPlayerController : MonoBehaviour
         }
 
         battleCrySpeedMultiplier = mult;
-        Debug.Log($"[Player] Battle Cry! Speed x{mult} for {data.duration}s");
+        Debug.Log($"[Player] Battle Cry! Speed x{mult} for {duration}s");
 
-        yield return new WaitForSeconds(data.duration);
+        yield return new WaitForSeconds(duration);
 
         battleCrySpeedMultiplier = 1f;
         battleCryRoutine = null;
@@ -847,10 +894,13 @@ public class TopDownPlayerController : MonoBehaviour
     /// </summary>
     private void SpawnProjectile(ProjectileSkillData skillData, Vector3 direction)
     {
-        // Calculate spawn position (player position + offset rotated to face direction)
-        Vector3 spawnPos = transform.position + transform.TransformDirection(skillData.spawnOffset);
+        // Base the spawn on the collider's actual grounded footprint rather than the raw
+        // transform, so a stale/mis-snapped pivot can't bury the projectile in terrain.
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+        Vector3 basePos = capsule != null ? capsule.bounds.center : transform.position;
+        Vector3 spawnPos = basePos + transform.TransformDirection(skillData.spawnOffset);
         Quaternion spawnRot = Quaternion.LookRotation(direction);
-        
+
         // Instantiate projectile
         GameObject projectileObj = Instantiate(skillData.projectilePrefab, spawnPos, spawnRot);
         

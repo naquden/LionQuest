@@ -104,8 +104,11 @@ public static class PlayerHudGenerator
         var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
         content.transform.SetParent(panelRoot.transform, false);
         StretchFull((RectTransform)content.transform);
-        content.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.07f, 0.6f);
-        SetNoRaycast(content.GetComponent<Image>());
+        Image contentBg = content.GetComponent<Image>();
+        contentBg.sprite = UiTheme.RoundedPanelSprite;
+        contentBg.type = Image.Type.Sliced;
+        contentBg.color = new Color(UiTheme.Surface.r, UiTheme.Surface.g, UiTheme.Surface.b, 0.85f);
+        SetNoRaycast(contentBg);
 
         Image portraitImage = BuildPortrait(content.transform, corner);
         TMP_Text playerLabelText = BuildPlayerLabel(content.transform, corner);
@@ -115,9 +118,9 @@ public static class PlayerHudGenerator
 
         Image[] skillIconImages = new Image[SkillSlotCount];
         Image[] skillCooldownOverlays = new Image[SkillSlotCount];
-        TMP_Text[] skillCooldownTexts = new TMP_Text[SkillSlotCount];
         TMP_Text[] skillSlotLabels = new TMP_Text[SkillSlotCount];
-        BuildSkillSlots(content.transform, corner, skillIconImages, skillCooldownOverlays, skillCooldownTexts, skillSlotLabels);
+        Image[] skillSlotBackgrounds = new Image[SkillSlotCount];
+        BuildSkillSlots(content.transform, corner, skillIconImages, skillCooldownOverlays, skillSlotLabels, skillSlotBackgrounds);
 
         var panel = panelRoot.AddComponent<PlayerHUDPanel>();
         var so = new SerializedObject(panel);
@@ -131,8 +134,8 @@ public static class PlayerHudGenerator
 
         AssignArray(so, "skillIconImages", skillIconImages);
         AssignArray(so, "skillCooldownOverlays", skillCooldownOverlays);
-        AssignArray(so, "skillCooldownTexts", skillCooldownTexts);
         AssignArray(so, "skillSlotLabels", skillSlotLabels);
+        AssignArray(so, "skillSlotBackgrounds", skillSlotBackgrounds);
 
         so.ApplyModifiedProperties();
 
@@ -152,7 +155,9 @@ public static class PlayerHudGenerator
         rect.anchoredPosition = new Vector2(corner.x > 0.5f ? -12 : 12, 0);
 
         Image image = go.GetComponent<Image>();
-        image.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+        image.sprite = UiTheme.RoundedPanelSprite;
+        image.type = Image.Type.Sliced;
+        image.color = UiTheme.SurfaceInset;
         SetNoRaycast(image);
         return image;
     }
@@ -187,7 +192,9 @@ public static class PlayerHudGenerator
         text.text = "P1";
         text.fontSize = 22;
         text.alignment = corner.x > 0.5f ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft;
-        text.color = Color.white;
+        text.color = UiTheme.Gold;
+        text.fontStyle = FontStyles.Bold;
+        text.font = UiTheme.DefaultFont();
         SetNoRaycast(text);
         return text;
     }
@@ -202,7 +209,8 @@ public static class PlayerHudGenerator
         text.text = "Character";
         text.fontSize = 18;
         text.alignment = corner.x > 0.5f ? TextAlignmentOptions.TopRight : TextAlignmentOptions.TopLeft;
-        text.color = new Color(1f, 1f, 1f, 0.85f);
+        text.color = UiTheme.TextLight;
+        text.font = UiTheme.DefaultFont();
         SetNoRaycast(text);
         return text;
     }
@@ -212,8 +220,11 @@ public static class PlayerHudGenerator
         var bgGo = new GameObject("HealthBarBg", typeof(RectTransform), typeof(Image));
         TopStretchX(bgGo, parent, corner.x > 0.5f ? 0f : 0.28f, corner.x > 0.5f ? 0.72f : 1f,
             BandHealthBarTop, BandHealthBarHeight);
-        bgGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
-        SetNoRaycast(bgGo.GetComponent<Image>());
+        Image healthBg = bgGo.GetComponent<Image>();
+        healthBg.sprite = UiTheme.PillFillSprite;
+        healthBg.type = Image.Type.Sliced;
+        healthBg.color = UiTheme.SurfaceInset;
+        SetNoRaycast(healthBg);
 
         var fillGo = new GameObject("HealthBarFill", typeof(RectTransform), typeof(Image));
         fillGo.transform.SetParent(bgGo.transform, false);
@@ -228,7 +239,7 @@ public static class PlayerHudGenerator
         fillImage.fillMethod = Image.FillMethod.Horizontal;
         fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
         fillImage.fillAmount = 1f;
-        fillImage.color = new Color(0.75f, 0.15f, 0.15f, 1f);
+        fillImage.color = UiTheme.SelectedOutline;
         SetNoRaycast(fillImage);
 
         var textGo = new GameObject("HealthText", typeof(RectTransform), typeof(TextMeshProUGUI));
@@ -238,7 +249,8 @@ public static class PlayerHudGenerator
         healthText.text = "100 / 100";
         healthText.fontSize = 14;
         healthText.alignment = TextAlignmentOptions.Center;
-        healthText.color = Color.white;
+        healthText.color = UiTheme.TextLight;
+        healthText.font = UiTheme.DefaultFont();
         SetNoRaycast(healthText);
 
         return (fillImage, healthText);
@@ -254,12 +266,14 @@ public static class PlayerHudGenerator
         text.text = "0";
         text.fontSize = 16;
         text.alignment = corner.x > 0.5f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
-        text.color = new Color(1f, 0.85f, 0.2f, 1f);
+        text.color = UiTheme.Gold;
+        text.fontStyle = FontStyles.Bold;
+        text.font = UiTheme.DefaultFont();
         SetNoRaycast(text);
         return text;
     }
 
-    static void BuildSkillSlots(Transform parent, Vector2 corner, Image[] icons, Image[] overlays, TMP_Text[] cooldownTexts, TMP_Text[] labels)
+    static void BuildSkillSlots(Transform parent, Vector2 corner, Image[] icons, Image[] overlays, TMP_Text[] labels, Image[] backgrounds)
     {
         const float slotSize = 56f;
         const float spacing = 8f;
@@ -282,8 +296,12 @@ public static class PlayerHudGenerator
             slotRect.pivot = new Vector2(0f, 0f);
             slotRect.sizeDelta = new Vector2(slotSize, slotSize);
             slotRect.anchoredPosition = new Vector2(i * (slotSize + spacing), 0);
-            slotGo.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.18f, 0.9f);
-            SetNoRaycast(slotGo.GetComponent<Image>());
+            Image background = slotGo.GetComponent<Image>();
+            background.sprite = UiTheme.RoundedPanelSprite;
+            background.type = Image.Type.Sliced;
+            background.color = UiTheme.SurfaceInset;
+            SetNoRaycast(background);
+            backgrounds[i] = background;
 
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(slotGo.transform, false);
@@ -292,17 +310,6 @@ public static class PlayerHudGenerator
             icon.enabled = false;
             SetNoRaycast(icon);
             icons[i] = icon;
-
-            var labelGo = new GameObject("SlotLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
-            labelGo.transform.SetParent(slotGo.transform, false);
-            StretchFull((RectTransform)labelGo.transform);
-            var label = labelGo.GetComponent<TextMeshProUGUI>();
-            label.text = (i + 1).ToString();
-            label.fontSize = 24;
-            label.alignment = TextAlignmentOptions.Center;
-            label.color = new Color(1f, 1f, 1f, 0.6f);
-            SetNoRaycast(label);
-            labels[i] = label;
 
             var overlayGo = new GameObject("CooldownOverlay", typeof(RectTransform), typeof(Image));
             overlayGo.transform.SetParent(slotGo.transform, false);
@@ -322,16 +329,24 @@ public static class PlayerHudGenerator
             SetNoRaycast(overlay);
             overlays[i] = overlay;
 
-            var cooldownTextGo = new GameObject("CooldownText", typeof(RectTransform), typeof(TextMeshProUGUI));
-            cooldownTextGo.transform.SetParent(slotGo.transform, false);
-            StretchFull((RectTransform)cooldownTextGo.transform);
-            var cooldownText = cooldownTextGo.GetComponent<TextMeshProUGUI>();
-            cooldownText.fontSize = 18;
-            cooldownText.alignment = TextAlignmentOptions.Center;
-            cooldownText.color = Color.white;
-            cooldownTextGo.SetActive(false);
-            SetNoRaycast(cooldownText);
-            cooldownTexts[i] = cooldownText;
+            // Corner keybind badge — always visible (even with an icon set), so slots stay
+            // readable once real icons are assigned. Drawn after the overlay so it stays on top.
+            var labelGo = new GameObject("SlotLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelGo.transform.SetParent(slotGo.transform, false);
+            var labelRect = (RectTransform)labelGo.transform;
+            labelRect.anchorMin = labelRect.anchorMax = new Vector2(1f, 0f);
+            labelRect.pivot = new Vector2(1f, 0f);
+            labelRect.sizeDelta = new Vector2(18f, 18f);
+            labelRect.anchoredPosition = new Vector2(-2f, 2f);
+            var label = labelGo.GetComponent<TextMeshProUGUI>();
+            label.text = (i + 1).ToString();
+            label.fontSize = 14;
+            label.alignment = TextAlignmentOptions.BottomRight;
+            label.color = UiTheme.TextLight;
+            label.fontStyle = FontStyles.Bold;
+            label.font = UiTheme.DefaultFont();
+            SetNoRaycast(label);
+            labels[i] = label;
         }
     }
 

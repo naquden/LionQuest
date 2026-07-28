@@ -3,35 +3,76 @@ using TMPro;
 using UnityEngine.UI;
 
 /// <summary>
-/// Controls one player slot panel's visuals. Driven entirely by CharacterSelectionManager.
+/// Controls one player slot card's visuals. Driven entirely by CharacterSelectionManager.
 /// </summary>
 public class PlayerSlotUI : MonoBehaviour
 {
+    [System.Serializable]
+    public class StatBar
+    {
+        public TMP_Text label;
+        public Image[] segments;
+
+        public void Set(int level)
+        {
+            if (label != null) label.text = $"Lv {level}";
+            if (segments == null) return;
+            int filled = Mathf.Clamp(level, 0, segments.Length);
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (segments[i] != null) segments[i].color = i < filled ? UiPalette.Gold : UiPalette.SurfaceInset;
+            }
+        }
+    }
+
+    [Header("Identity")]
+    [SerializeField] private TMP_Text playerLabelText;
+    [SerializeField] private Image accentBanner;
+    [SerializeField] private Image cardBorder;
+    [SerializeField] private Image glow;
+
+    [Header("Panels")]
     [SerializeField] private GameObject emptyPanel;
     [SerializeField] private GameObject selectingPanel;
     [SerializeField] private GameObject readyOverlay;
 
-    [SerializeField] private TMP_Text characterNameText;
-    [SerializeField] private TMP_Text soulsText;
-    [SerializeField] private TMP_Text strengthText;
-    [SerializeField] private TMP_Text healthText;
-    [SerializeField] private TMP_Text speedText;
-    [SerializeField] private TMP_Text lockedFlashText;
+    [Header("Preview")]
+    [SerializeField] private CharacterPreviewStage previewStage;
 
-    [Header("Ready overlay (separate visuals from the selecting panel above)")]
-    [SerializeField] private Image readyPortraitImage;
+    [Header("Selecting panel content")]
+    [SerializeField] private TMP_Text characterNameText;
+    [SerializeField] private TMP_Text soulsValueText;
+    [SerializeField] private StatBar strengthBar;
+    [SerializeField] private StatBar healthBar;
+    [SerializeField] private StatBar speedBar;
+    [SerializeField] private TMP_Text lockedFlashText;
+    [SerializeField] private TMP_Text hintText;
+
+    [Header("Ready overlay")]
     [SerializeField] private TMP_Text readyNameText;
+    [SerializeField] private TMP_Text readySealText;
 
     [SerializeField] private Transform carouselContainer;
     [SerializeField] private GameObject carouselItemPrefab;
 
     private CharacterCarouselItem[] carouselItems = System.Array.Empty<CharacterCarouselItem>();
+    private Color accentColor = UiPalette.Gold;
+
+    public void SetPlayerIndex(int index)
+    {
+        accentColor = UiPalette.PlayerAccent(index);
+        if (playerLabelText != null) playerLabelText.text = $"PLAYER {index + 1}";
+        if (accentBanner != null) accentBanner.color = accentColor;
+        if (cardBorder != null) cardBorder.color = accentColor;
+        if (glow != null) glow.color = new Color(accentColor.r, accentColor.g, accentColor.b, 0.35f);
+    }
 
     public void SetEmpty()
     {
         emptyPanel.SetActive(true);
         selectingPanel.SetActive(false);
         readyOverlay.SetActive(false);
+        if (previewStage != null) previewStage.Hide();
     }
 
     public void SetSelecting(CharacterDefinition[] roster, int selectedIndex, System.Func<CharacterDefinition, bool> isUnlocked, CharacterSaveData saveData)
@@ -50,15 +91,21 @@ public class PlayerSlotUI : MonoBehaviour
         selectingPanel.SetActive(false);
         readyOverlay.SetActive(true);
 
-        if (readyPortraitImage != null) readyPortraitImage.sprite = character.portrait;
         if (readyNameText != null) readyNameText.text = character.displayName;
+        if (readySealText != null) readySealText.text = "READY";
+        if (previewStage != null) previewStage.Show(character);
     }
 
     private void BuildCarousel(CharacterDefinition[] roster, System.Func<CharacterDefinition, bool> isUnlocked)
     {
-        foreach (Transform child in carouselContainer)
+        // Snapshot first — DestroyImmediate (edit-mode path) reindexes children as it goes,
+        // which corrupts a live `foreach (Transform child in carouselContainer)`.
+        var existingChildren = new Transform[carouselContainer.childCount];
+        for (int i = 0; i < existingChildren.Length; i++) existingChildren[i] = carouselContainer.GetChild(i);
+        foreach (Transform child in existingChildren)
         {
-            Destroy(child.gameObject);
+            if (Application.isPlaying) Destroy(child.gameObject);
+            else DestroyImmediate(child.gameObject);
         }
 
         carouselItems = new CharacterCarouselItem[roster.Length];
@@ -83,10 +130,12 @@ public class PlayerSlotUI : MonoBehaviour
     public void UpdateStats(CharacterDefinition character, CharacterSaveData saveData)
     {
         if (characterNameText != null) characterNameText.text = character.displayName;
-        if (soulsText != null) soulsText.text = $"Souls: {saveData.souls}";
-        if (strengthText != null) strengthText.text = $"Str: {saveData.strengthLevel}";
-        if (healthText != null) healthText.text = $"HP: {saveData.healthLevel}";
-        if (speedText != null) speedText.text = $"Spd: {saveData.speedLevel}";
+        if (soulsValueText != null) soulsValueText.text = saveData.souls.ToString();
+        strengthBar?.Set(saveData.strengthLevel);
+        healthBar?.Set(saveData.healthLevel);
+        speedBar?.Set(saveData.speedLevel);
+
+        if (previewStage != null) previewStage.Show(character);
     }
 
     public void FlashLocked()

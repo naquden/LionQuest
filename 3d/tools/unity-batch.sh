@@ -5,6 +5,7 @@
 #   sh tools/unity-batch.sh Compile
 #   sh tools/unity-batch.sh RunGenerator StartScreen
 #   sh tools/unity-batch.sh RunGeneratorByMenuPath "LionQuest/Generate/Start Screen"
+#   sh tools/unity-batch.sh RunGenerator CaptureSelection graphics   # needs a real GPU context
 #
 # Exit 0 = success (AGENT_BATCH_OK in log)
 # Exit 1 = failure (AGENT_BATCH_FAIL or compile errors in log)
@@ -12,8 +13,15 @@
 UNITY="/Applications/Unity/Hub/Editor/6000.3.2f1/Unity.app/Contents/MacOS/Unity"
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$PROJ/Logs/agent-batch.log"
-METHOD="${1:?usage: unity-batch.sh <Method> [AGENT_GEN]}"
+METHOD="${1:?usage: unity-batch.sh <Method> [AGENT_GEN] [graphics]}"
 export AGENT_GEN="${2:-}"
+
+# -nographics can't render to a Camera/RenderTexture. Screenshot-capture entry points need a
+# real graphics context — pass "graphics" as the 3rd arg to drop -nographics for this run.
+GFX_FLAG="-nographics"
+if [ "${3:-}" = "graphics" ]; then
+    GFX_FLAG=""
+fi
 
 # Detect editor lockfile — but only treat it as "editor open" if a process
 # actually holds it (a prior aborted batch run can leave a stale lockfile).
@@ -32,7 +40,7 @@ echo "Running AgentBatch.$METHOD (AGENT_GEN='$AGENT_GEN') ..."
 
 "$UNITY" \
     -batchmode \
-    -nographics \
+    $GFX_FLAG \
     -quit \
     -projectPath "$PROJ" \
     -executeMethod "AgentBatch.$METHOD" \

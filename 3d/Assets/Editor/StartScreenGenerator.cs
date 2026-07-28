@@ -108,7 +108,8 @@ public static class StartScreenGenerator
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
 
-        background.GetComponent<Image>().color = new Color(0.08f, 0.08f, 0.10f, 0.35f);
+        Image bgImage = background.GetComponent<Image>();
+        bgImage.color = new Color(UiTheme.BgBottom.r, UiTheme.BgBottom.g, UiTheme.BgBottom.b, 0.35f);
     }
 
     static void BuildTitle(Transform parent)
@@ -127,7 +128,9 @@ public static class StartScreenGenerator
         text.text = "LionQuest";
         text.fontSize = 72;
         text.alignment = TextAlignmentOptions.Center;
-        text.color = Color.white;
+        text.color = UiTheme.Gold;
+        text.fontStyle = FontStyles.Bold;
+        text.font = UiTheme.DefaultFont();
     }
 
     static Transform BuildMenuPanel(Transform parent)
@@ -167,7 +170,9 @@ public static class StartScreenGenerator
         layoutElement.preferredHeight = 90;
 
         var image = go.GetComponent<Image>();
-        image.color = new Color(0.2f, 0.2f, 0.25f);
+        image.sprite = UiTheme.RoundedPanelSprite;
+        image.type = Image.Type.Sliced;
+        image.color = UiTheme.Surface;
 
         var button = go.GetComponent<Button>();
         button.targetGraphic = image;
@@ -184,7 +189,9 @@ public static class StartScreenGenerator
         text.text = label;
         text.fontSize = 42;
         text.alignment = TextAlignmentOptions.Center;
-        text.color = Color.white;
+        text.color = UiTheme.TextLight;
+        text.fontStyle = FontStyles.Bold;
+        text.font = UiTheme.DefaultFont();
 
         return button;
     }

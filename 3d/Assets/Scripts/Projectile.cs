@@ -148,6 +148,10 @@ public class Projectile : MonoBehaviour
                 // Only destroy on solid objects, not triggers
                 if (!other.isTrigger)
                 {
+                    if (debugProjectile)
+                    {
+                        Debug.Log($"[Projectile] Destroyed by non-target collider '{other.gameObject.name}' (tag={other.tag}) at {transform.position}");
+                    }
                     SpawnHitEffect(other.ClosestPoint(transform.position));
                     Destroy(gameObject);
                 }

@@ -1,5 +1,13 @@
 # AssassinoCapuchino (`AssCap`) — Finalization Plan
 
+> **Superseded by `doc/characterUpgrade.md` (skill-tree rewrite).** Decisions #2–#4 below (Battle Cry
+> magnitude/cost coupled to `speedLevel`) no longer hold: `speedLevel` is now the universal passive
+> move-speed stat, and Battle Cry magnitude/duration/cooldown are purchasable skill-tree nodes
+> (`battlecry.magnitude_1/2`, `battlecry.duration_1/2`, `battlecry.cooldown_2s`) resolved via
+> `CharacterStats.GetSkillValue("battlecry", SkillEffect.Magnitude, fallback)`. `GetBattleCryMultiplier()`
+> and `GetSpeedCost()`-as-battle-cry-cost no longer exist. The rest of this doc (Shuriken damage tuning,
+> `BattleCrySkillData` SO shape, cooldown-gated self-buff mechanism) is still accurate history.
+
 ## Goal
 
 Finalize the AssCap character's two skills:

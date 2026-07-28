@@ -77,7 +77,11 @@ public class PlayerSpawner : MonoBehaviour
         instance.SetActive(false);
 
         CharacterStats stats = instance.GetComponent<CharacterStats>();
-        if (stats != null) stats.characterID = definition.characterID;
+        if (stats != null)
+        {
+            stats.characterID = definition.characterID;
+            stats.definition = definition;
+        }
 
         instance.transform.position = point.position;
         instance.transform.rotation = point.rotation;

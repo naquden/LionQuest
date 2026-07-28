@@ -18,3 +18,176 @@ MonoBehaviour:
   portraitLocked: {fileID: 0}
   unlockedByDefault: 1
   playerPrefab: {fileID: 7565404103289180475, guid: 50ee41024563a4e19a75c625a2c384cc, type: 3}
+  skillTrees:
+  - skillId: whirlwind
+    displayName: Whirlwind
+    skillSlot: 1
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock
+      description: Lets you use Whirlwind, a spinning attack that hits everything
+        around you.
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      prereqNodeIds: []
+      gridPos: {x: 1, y: 0}
+    - nodeId: damage_1
+      displayName: Damage +0.5x
+      description: Whirlwind hits harder.
+      effect: 1
+      op: 0
+      value: 0.5
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 0, y: 1}
+    - nodeId: damage_2
+      displayName: Damage +1.0x
+      description: Whirlwind hits even harder.
+      effect: 1
+      op: 0
+      value: 1
+      cost: 35
+      prereqNodeIds:
+      - damage_1
+      gridPos: {x: 0, y: 2}
+    - nodeId: area_1
+      displayName: Area +1
+      description: Whirlwind hits enemies farther away from you.
+      effect: 3
+      op: 0
+      value: 1
+      cost: 20
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 1, y: 1}
+    - nodeId: cooldown_2s
+      displayName: Cooldown -2s
+      description: Whirlwind is ready to use 2 seconds sooner.
+      effect: 2
+      op: 0
+      value: -2
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 2, y: 1}
+    - nodeId: cooldown_3s
+      displayName: Cooldown -3s
+      description: Whirlwind is ready to use 3 more seconds sooner.
+      effect: 2
+      op: 0
+      value: -3
+      cost: 40
+      prereqNodeIds:
+      - cooldown_2s
+      gridPos: {x: 2, y: 2}
+  - skillId: shuriken
+    displayName: Shuriken
+    skillSlot: 2
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock
+      description: Lets you use Shuriken, a ranged throw that hits enemies from a
+        distance.
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      prereqNodeIds: []
+      gridPos: {x: 1, y: 0}
+    - nodeId: damage_1
+      displayName: Damage +5
+      description: Each shuriken hits harder.
+      effect: 1
+      op: 0
+      value: 5
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 0, y: 1}
+    - nodeId: count_1
+      displayName: Projectile +1
+      description: Throw one extra shuriken per use.
+      effect: 6
+      op: 0
+      value: 1
+      cost: 30
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 1, y: 1}
+    - nodeId: cooldown_2s
+      displayName: Cooldown -2s
+      description: Shuriken is ready to use 2 seconds sooner.
+      effect: 2
+      op: 0
+      value: -2
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 2, y: 1}
+  - skillId: battlecry
+    displayName: Battle Cry
+    skillSlot: 3
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock
+      description: Lets you use Battle Cry, a shout that makes you move faster for
+        a few seconds.
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      prereqNodeIds: []
+      gridPos: {x: 1, y: 0}
+    - nodeId: magnitude_1
+      displayName: Magnitude +0.25x
+      description: Battle Cry makes you move even faster.
+      effect: 5
+      op: 0
+      value: 0.25
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 0, y: 1}
+    - nodeId: magnitude_2
+      displayName: Magnitude +0.5x
+      description: Battle Cry makes you move a lot faster.
+      effect: 5
+      op: 0
+      value: 0.5
+      cost: 35
+      prereqNodeIds:
+      - magnitude_1
+      gridPos: {x: 0, y: 2}
+    - nodeId: duration_1
+      displayName: Duration +1s
+      description: Battle Cry's speed boost lasts 1 second longer.
+      effect: 4
+      op: 0
+      value: 1
+      cost: 20
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 1, y: 1}
+    - nodeId: duration_2
+      displayName: Duration +2s
+      description: Battle Cry's speed boost lasts 2 more seconds.
+      effect: 4
+      op: 0
+      value: 2
+      cost: 40
+      prereqNodeIds:
+      - duration_1
+      gridPos: {x: 1, y: 2}
+    - nodeId: cooldown_2s
+      displayName: Cooldown -2s
+      description: Battle Cry is ready to use 2 seconds sooner.
+      effect: 2
+      op: 0
+      value: -2
+      cost: 15
+      prereqNodeIds:
+      - unlock
+      gridPos: {x: 2, y: 1}

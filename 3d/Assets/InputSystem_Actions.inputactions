@@ -528,6 +528,38 @@
                             "isPartOfComposite": false
                         }
                     ]
+                },
+                {
+                    "name": "Upgrade",
+                    "type": "Button",
+                    "id": "10000000-0000-0000-0000-000000000017",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "bindings": [
+                        {
+                            "name": "",
+                            "id": "10000000-0000-0000-0000-000000000018",
+                            "path": "<Gamepad>/buttonNorth",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Upgrade",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        },
+                        {
+                            "name": "",
+                            "id": "10000000-0000-0000-0000-000000000019",
+                            "path": "<Keyboard>/tab",
+                            "interactions": "",
+                            "processors": "",
+                            "groups": "",
+                            "action": "Upgrade",
+                            "isComposite": false,
+                            "isPartOfComposite": false
+                        }
+                    ]
                 }
             ],
             "bindings": []

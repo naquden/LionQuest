@@ -10,8 +10,7 @@
 - Do NOT create markdown (.md) files unless explicitly requested by the user
 
 **Scene Files:**
-- Do NOT modify or change Scene files (.unity) unless explicitly approved by the user
-- Scene modifications must be explicitly requested - never make scene changes proactively
+- AI agents may create and modify Scene files (.unity), preferably via editor generator scripts (code-generated scenes). Manual/programmatic scene edits are allowed as part of the agentic workflow.
 
 **Physics and Movement:**
 - All movement must be done using Rigidbody.AddForce() unless explicitly stated otherwise

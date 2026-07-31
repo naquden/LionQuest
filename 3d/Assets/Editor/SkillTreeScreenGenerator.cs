@@ -6,25 +6,30 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Builds the skill-tree upgrade screen (node/link/branch-total prefabs, panel prefab), wires it
-/// into the CharacterSelection scene, and authors AssCap's four trees (attributes + 3 skills) onto
-/// its CharacterDefinition. Dual entry point per project convention. AgentBatch.cs dispatches
-/// "UpgradeScreen" here.
+/// Builds the upgrade screen (row/tab prefabs, panel prefab), wires it into the CharacterSelection
+/// scene, and authors each playable character's four upgrade groups (Body + 3 skills) onto its
+/// CharacterDefinition.
+/// Dual entry point per project convention. AgentBatch.cs dispatches "UpgradeScreen" here.
 ///
-/// Layout: one opaque full-screen panel, no tabs — every branch fans outward from a shared root
-/// at the bottom of a single scrollable node canvas. Left ~65% is the node canvas, right ~35% is
-/// the description/Buy info panel. Text and node sizes stay large — this should read at a glance.
+/// Layout is a plain shop, not a graph: a left column of category tabs and a right column of upgrade
+/// rows, each row carrying its own name, plain sentence, rank pips, value change and price. Nothing
+/// to pan, no links, no legend — a non-gamer should be able to read one row and know what it does.
 /// </summary>
 public static class SkillTreeScreenGenerator
 {
     const string UIDir = "Assets/Prefabs/UI";
-    const string NodePrefabPath = UIDir + "/SkillTreeNode.prefab";
-    const string LinkPrefabPath = UIDir + "/SkillTreeLink.prefab";
-    const string BranchTotalPrefabPath = UIDir + "/SkillTreeBranchTotal.prefab";
+    const string RowPrefabPath = UIDir + "/SkillTreeNode.prefab";
+    const string TabPrefabPath = UIDir + "/SkillTreeLink.prefab";
     const string PanelPrefabPath = UIDir + "/SkillTreePanel.prefab";
     const string SelectionScenePath = "Assets/Scenes/CharacterSelection.unity";
 
-    const string AssCapDefinitionPath = "Assets/Characters/AssassinoCapuchino/AssCap_Definition.asset";
+    const string AssCapDir = "Assets/Characters/AssassinoCapuchino";
+    const string AssCapDefinitionPath = AssCapDir + "/AssCap_Definition.asset";
+    const string Char67Dir = "Assets/Characters/67";
+    const string Char67DefinitionPath = Char67Dir + "/67_Definition.asset";
+
+    const float RowHeight = 118f;
+    const int MaxRankPips = 6;
 
     [MenuItem("LionQuest/Generate/Upgrade Screen")]
     public static void Generate()
@@ -35,15 +40,18 @@ public static class SkillTreeScreenGenerator
                 "(Window > TextMeshPro > Import TMP Essential Resources). Continuing anyway.");
         }
 
-        EnsureFolder(UIDir);
+        UiTheme.EnsureFolder(UIDir);
 
-        GameObject nodePrefab = BuildNodePrefab();
-        GameObject linkPrefab = BuildLinkPrefab();
-        GameObject branchTotalPrefab = BuildBranchTotalPrefab();
-        GameObject panelPrefab = BuildPanelPrefab(nodePrefab, linkPrefab, branchTotalPrefab);
+        // The old graph layout's per-branch total label prefab has no place in a tabbed shop.
+        AssetDatabase.DeleteAsset(UIDir + "/SkillTreeBranchTotal.prefab");
+
+        GameObject rowPrefab = BuildRowPrefab();
+        GameObject tabPrefab = BuildTabPrefab();
+        GameObject panelPrefab = BuildPanelPrefab(rowPrefab, tabPrefab);
 
         WireIntoSelectionScene(panelPrefab);
-        AuthorAssCapTrees();
+        AuthorTrees(AssCapDefinitionPath, AssCapDir, BuildShurikenTree);
+        AuthorTrees(Char67DefinitionPath, Char67Dir, BuildLaserTree);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
@@ -52,216 +60,232 @@ public static class SkillTreeScreenGenerator
     }
 
     // ------------------------------------------------------------------
-    // SkillTreeNode.prefab — tier frame swaps by SkillNodeUI.Setup(), big and readable
+    // SkillTreeNode.prefab — one full-width upgrade row
     // ------------------------------------------------------------------
 
-    static GameObject BuildNodePrefab()
+    static GameObject BuildRowPrefab()
     {
-        var root = new GameObject("SkillTreeNode", typeof(RectTransform), typeof(Image), typeof(Button));
+        var root = new GameObject("SkillTreeRow", typeof(RectTransform), typeof(Image), typeof(Button),
+            typeof(LayoutElement));
         var rect = root.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(90, 90);
-        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(0f, RowHeight);
 
         Image background = root.GetComponent<Image>();
-        background.sprite = UiTheme.CircleSprite;
-        background.type = Image.Type.Simple;
-        background.color = UiTheme.Surface;
+        background.sprite = UiTheme.RoundedPanelSprite;
+        background.type = Image.Type.Sliced;
+        background.color = UiPalette.SurfaceInset;
+
+        var layout = root.GetComponent<LayoutElement>();
+        layout.minHeight = RowHeight;
+        layout.preferredHeight = RowHeight;
 
         Button button = root.GetComponent<Button>();
         button.targetGraphic = background;
+        button.transition = Selectable.Transition.None;
 
+        // Selection outline sits slightly outside the row so a highlighted row reads instantly.
         var ringGo = new GameObject("SelectionRing", typeof(RectTransform), typeof(Image));
         ringGo.transform.SetParent(root.transform, false);
         var ringRect = ringGo.GetComponent<RectTransform>();
         ringRect.anchorMin = Vector2.zero;
         ringRect.anchorMax = Vector2.one;
-        ringRect.offsetMin = new Vector2(-10, -10);
-        ringRect.offsetMax = new Vector2(10, 10);
+        ringRect.offsetMin = new Vector2(-5, -5);
+        ringRect.offsetMax = new Vector2(5, 5);
         Image ringImage = ringGo.GetComponent<Image>();
-        ringImage.sprite = UiTheme.RingSprite;
-        ringImage.type = Image.Type.Simple;
-        ringImage.color = UiTheme.SelectedOutline;
+        ringImage.sprite = UiTheme.RoundedOutlineSprite;
+        ringImage.type = Image.Type.Sliced;
+        ringImage.color = UiPalette.Gold;
         ringImage.raycastTarget = false;
         ringGo.SetActive(false);
 
-        var nameGo = new GameObject("NameText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        nameGo.transform.SetParent(root.transform, false);
-        var nameRect = nameGo.GetComponent<RectTransform>();
-        nameRect.anchorMin = new Vector2(0f, 1f);
-        nameRect.anchorMax = new Vector2(1f, 1f);
-        nameRect.pivot = new Vector2(0.5f, 0f);
-        nameRect.sizeDelta = new Vector2(160, 40);
-        nameRect.anchoredPosition = new Vector2(0, 6);
-        var nameText = nameGo.GetComponent<TextMeshProUGUI>();
-        nameText.text = "Node";
-        nameText.fontSize = 20;
-        nameText.enableAutoSizing = true;
-        nameText.fontSizeMin = 12;
-        nameText.fontSizeMax = 20;
-        nameText.alignment = TextAlignmentOptions.Bottom;
-        nameText.color = UiTheme.TextLight;
-        nameText.font = UiTheme.DefaultFont();
-        nameText.raycastTarget = false;
+        // Category colour stripe down the left edge — the only decorative colour on a row.
+        var stripeGo = new GameObject("AccentStripe", typeof(RectTransform), typeof(Image));
+        stripeGo.transform.SetParent(root.transform, false);
+        var stripeRect = stripeGo.GetComponent<RectTransform>();
+        stripeRect.anchorMin = new Vector2(0f, 0f);
+        stripeRect.anchorMax = new Vector2(0f, 1f);
+        stripeRect.pivot = new Vector2(0f, 0.5f);
+        stripeRect.sizeDelta = new Vector2(10f, -24f);
+        stripeRect.anchoredPosition = new Vector2(14f, 0f);
+        Image stripeImage = stripeGo.GetComponent<Image>();
+        stripeImage.sprite = UiTheme.PillFillSprite;
+        stripeImage.type = Image.Type.Sliced;
+        stripeImage.raycastTarget = false;
 
-        var rankGo = new GameObject("RankText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        rankGo.transform.SetParent(root.transform, false);
-        var rankRect = rankGo.GetComponent<RectTransform>();
-        rankRect.anchorMin = Vector2.zero;
-        rankRect.anchorMax = Vector2.one;
-        rankRect.offsetMin = Vector2.zero;
-        rankRect.offsetMax = Vector2.zero;
-        var rankText = rankGo.GetComponent<TextMeshProUGUI>();
-        rankText.text = "0/1";
-        rankText.fontSize = 18;
-        rankText.fontStyle = FontStyles.Bold;
-        rankText.alignment = TextAlignmentOptions.Center;
-        rankText.color = UiTheme.TextLight;
-        rankText.font = UiTheme.DefaultFont();
-        rankText.raycastTarget = false;
+        TMP_Text nameText = UiTheme.Text(root.transform, "NameText", "Upgrade", 34,
+            TextAlignmentOptions.BottomLeft, UiPalette.TextLight, FontStyles.Bold);
+        var nameRect = (RectTransform)nameText.transform;
+        nameRect.anchorMin = new Vector2(0f, 0.5f);
+        nameRect.anchorMax = new Vector2(0.55f, 1f);
+        nameRect.offsetMin = new Vector2(40, 0);
+        nameRect.offsetMax = new Vector2(0, -12);
 
-        var costGo = new GameObject("CostText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        costGo.transform.SetParent(root.transform, false);
-        var costRect = costGo.GetComponent<RectTransform>();
-        costRect.anchorMin = new Vector2(0f, 0f);
-        costRect.anchorMax = new Vector2(1f, 0f);
-        costRect.pivot = new Vector2(0.5f, 1f);
-        costRect.sizeDelta = new Vector2(160, 30);
-        costRect.anchoredPosition = new Vector2(0, -6);
-        var costText = costGo.GetComponent<TextMeshProUGUI>();
-        costText.text = "0 souls";
-        costText.fontSize = 16;
-        costText.alignment = TextAlignmentOptions.Top;
-        costText.color = UiTheme.Gold;
-        costText.font = UiTheme.DefaultFont();
-        costText.raycastTarget = false;
+        TMP_Text descText = UiTheme.Text(root.transform, "DescriptionText", "What it does.", 24,
+            TextAlignmentOptions.TopLeft, UiPalette.TextMuted);
+        var descRect = (RectTransform)descText.transform;
+        descRect.anchorMin = new Vector2(0f, 0f);
+        descRect.anchorMax = new Vector2(0.55f, 0.5f);
+        descRect.offsetMin = new Vector2(40, 10);
+        descRect.offsetMax = Vector2.zero;
+        descText.enableWordWrapping = true;
 
-        var nodeUi = root.AddComponent<SkillTreeNodeUI>();
-        var so = new SerializedObject(nodeUi);
+        TMP_Text changeText = UiTheme.Text(root.transform, "ChangeText", "10s → 8s", 26,
+            TextAlignmentOptions.Right, UiPalette.TextLight, FontStyles.Bold);
+        var changeRect = (RectTransform)changeText.transform;
+        changeRect.anchorMin = new Vector2(0.75f, 0.48f);
+        changeRect.anchorMax = new Vector2(1f, 1f);
+        changeRect.offsetMin = Vector2.zero;
+        changeRect.offsetMax = new Vector2(-32, -12);
+
+        TMP_Text priceText = UiTheme.Text(root.transform, "PriceText", "10 souls", 26,
+            TextAlignmentOptions.Right, UiPalette.Gold, FontStyles.Bold);
+        var priceRect = (RectTransform)priceText.transform;
+        priceRect.anchorMin = new Vector2(0.75f, 0f);
+        priceRect.anchorMax = new Vector2(1f, 0.48f);
+        priceRect.offsetMin = new Vector2(0, 10);
+        priceRect.offsetMax = new Vector2(-32, 0);
+
+        // Rank pips: a fixed strip the controller shows/hides per row, so "how many left to buy"
+        // is countable at a glance instead of parsed from "3/5" text.
+        var pipsGo = new GameObject("RankPips", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        pipsGo.transform.SetParent(root.transform, false);
+        var pipsRect = pipsGo.GetComponent<RectTransform>();
+        // Own column between the name/description block and the price block. Anchored positively
+        // from 0.55 — an earlier version anchored at 0.62 and pulled itself back by -150px, which
+        // dragged the pips on top of the description text.
+        pipsRect.anchorMin = new Vector2(0.55f, 0.5f);
+        pipsRect.anchorMax = new Vector2(0.55f, 0.5f);
+        pipsRect.pivot = new Vector2(0f, 0.5f);
+        pipsRect.sizeDelta = new Vector2(180f, 22f);
+        pipsRect.anchoredPosition = new Vector2(12f, 0f);
+        var pipsLayout = pipsGo.GetComponent<HorizontalLayoutGroup>();
+        pipsLayout.spacing = 8f;
+        pipsLayout.childAlignment = TextAnchor.MiddleLeft;
+        pipsLayout.childForceExpandWidth = false;
+        pipsLayout.childForceExpandHeight = false;
+
+        var pips = new Image[MaxRankPips];
+        for (int i = 0; i < MaxRankPips; i++)
+        {
+            var pipGo = new GameObject($"Pip{i}", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            pipGo.transform.SetParent(pipsGo.transform, false);
+            pipGo.GetComponent<RectTransform>().sizeDelta = new Vector2(20f, 20f);
+            var pipLayout = pipGo.GetComponent<LayoutElement>();
+            pipLayout.minWidth = 20f;
+            pipLayout.minHeight = 20f;
+            Image pipImage = pipGo.GetComponent<Image>();
+            pipImage.sprite = UiTheme.CircleSprite;
+            pipImage.color = UiPalette.PipEmpty;
+            pipImage.raycastTarget = false;
+            pips[i] = pipImage;
+        }
+
+        var rowUi = root.AddComponent<SkillTreeNodeUI>();
+        var so = new SerializedObject(rowUi);
         so.FindProperty("background").objectReferenceValue = background;
         so.FindProperty("selectionRing").objectReferenceValue = ringImage;
+        so.FindProperty("accentStripe").objectReferenceValue = stripeImage;
         so.FindProperty("nameText").objectReferenceValue = nameText;
-        so.FindProperty("rankText").objectReferenceValue = rankText;
-        so.FindProperty("costText").objectReferenceValue = costText;
+        so.FindProperty("descriptionText").objectReferenceValue = descText;
+        so.FindProperty("changeText").objectReferenceValue = changeText;
+        so.FindProperty("priceText").objectReferenceValue = priceText;
         so.FindProperty("button").objectReferenceValue = button;
-        so.FindProperty("keystoneSprite").objectReferenceValue = UiTheme.SquareSprite;
-        so.FindProperty("majorSprite").objectReferenceValue = UiTheme.DiamondSprite;
-        so.FindProperty("minorSprite").objectReferenceValue = UiTheme.CircleSprite;
+        UiTheme.AssignArray(so, "rankPips", pips);
         so.ApplyModifiedProperties();
 
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, NodePrefabPath);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, RowPrefabPath);
         Object.DestroyImmediate(root);
         return prefab;
     }
 
     // ------------------------------------------------------------------
-    // SkillTreeLink.prefab — elbow (horizontal + vertical) with a diamond junction
+    // SkillTreeLink.prefab — one category tab (type name kept; see SkillTreeLinkUI)
     // ------------------------------------------------------------------
 
-    static GameObject BuildLinkPrefab()
+    static GameObject BuildTabPrefab()
     {
-        var root = new GameObject("SkillTreeLink", typeof(RectTransform));
-        root.GetComponent<RectTransform>().sizeDelta = Vector2.zero;
+        var root = new GameObject("SkillTreeCategoryTab", typeof(RectTransform), typeof(Image), typeof(Button),
+            typeof(LayoutElement));
+        var rect = root.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(0f, 104f);
 
-        var hGo = new GameObject("Horizontal", typeof(RectTransform), typeof(Image));
-        hGo.transform.SetParent(root.transform, false);
-        var hRect = hGo.GetComponent<RectTransform>();
-        hRect.pivot = new Vector2(0.5f, 0.5f);
-        hRect.sizeDelta = new Vector2(10, 6);
-        Image hImage = hGo.GetComponent<Image>();
-        hImage.color = UiTheme.GoldDim;
-        hImage.raycastTarget = false;
+        Image background = root.GetComponent<Image>();
+        background.sprite = UiTheme.RoundedPanelSprite;
+        background.type = Image.Type.Sliced;
+        background.color = UiPalette.SurfaceInset;
 
-        var vGo = new GameObject("Vertical", typeof(RectTransform), typeof(Image));
-        vGo.transform.SetParent(root.transform, false);
-        var vRect = vGo.GetComponent<RectTransform>();
-        vRect.pivot = new Vector2(0.5f, 0.5f);
-        vRect.sizeDelta = new Vector2(6, 10);
-        Image vImage = vGo.GetComponent<Image>();
-        vImage.color = UiTheme.GoldDim;
-        vImage.raycastTarget = false;
+        var layout = root.GetComponent<LayoutElement>();
+        layout.minHeight = 104f;
+        layout.preferredHeight = 104f;
 
-        var jGo = new GameObject("Junction", typeof(RectTransform), typeof(Image));
-        jGo.transform.SetParent(root.transform, false);
-        var jRect = jGo.GetComponent<RectTransform>();
-        jRect.pivot = new Vector2(0.5f, 0.5f);
-        jRect.sizeDelta = new Vector2(16, 16);
-        Image jImage = jGo.GetComponent<Image>();
-        jImage.sprite = UiTheme.DiamondSprite;
-        jImage.type = Image.Type.Simple;
-        jImage.color = UiTheme.GoldDim;
-        jImage.raycastTarget = false;
+        Button button = root.GetComponent<Button>();
+        button.targetGraphic = background;
+        button.transition = Selectable.Transition.None;
 
-        var link = root.AddComponent<SkillTreeLinkUI>();
-        var so = new SerializedObject(link);
-        so.FindProperty("horizontalSegment").objectReferenceValue = hRect;
-        so.FindProperty("verticalSegment").objectReferenceValue = vRect;
-        so.FindProperty("horizontalImage").objectReferenceValue = hImage;
-        so.FindProperty("verticalImage").objectReferenceValue = vImage;
-        so.FindProperty("junctionImage").objectReferenceValue = jImage;
+        // Focus outline, matching the row prefab's — shown only while the cursor is in the tab list.
+        var ringGo = new GameObject("SelectionRing", typeof(RectTransform), typeof(Image));
+        ringGo.transform.SetParent(root.transform, false);
+        var ringRect = ringGo.GetComponent<RectTransform>();
+        ringRect.anchorMin = Vector2.zero;
+        ringRect.anchorMax = Vector2.one;
+        ringRect.offsetMin = new Vector2(-5, -5);
+        ringRect.offsetMax = new Vector2(5, 5);
+        Image ringImage = ringGo.GetComponent<Image>();
+        ringImage.sprite = UiTheme.RoundedOutlineSprite;
+        ringImage.type = Image.Type.Sliced;
+        ringImage.color = UiPalette.Gold;
+        ringImage.raycastTarget = false;
+        ringGo.SetActive(false);
+
+        var barGo = new GameObject("AccentBar", typeof(RectTransform), typeof(Image));
+        barGo.transform.SetParent(root.transform, false);
+        var barRect = barGo.GetComponent<RectTransform>();
+        barRect.anchorMin = new Vector2(0f, 0f);
+        barRect.anchorMax = new Vector2(0f, 1f);
+        barRect.pivot = new Vector2(0f, 0.5f);
+        barRect.sizeDelta = new Vector2(12f, -20f);
+        barRect.anchoredPosition = new Vector2(12f, 0f);
+        Image barImage = barGo.GetComponent<Image>();
+        barImage.sprite = UiTheme.PillFillSprite;
+        barImage.type = Image.Type.Sliced;
+        barImage.raycastTarget = false;
+
+        TMP_Text titleText = UiTheme.Text(root.transform, "TitleText", "Group", 32,
+            TextAlignmentOptions.BottomLeft, UiPalette.TextLight, FontStyles.Bold);
+        var titleRect = (RectTransform)titleText.transform;
+        titleRect.anchorMin = new Vector2(0f, 0.45f);
+        titleRect.anchorMax = new Vector2(1f, 1f);
+        titleRect.offsetMin = new Vector2(38, 0);
+        titleRect.offsetMax = new Vector2(-18, -10);
+
+        TMP_Text subtitleText = UiTheme.Text(root.transform, "SubtitleText", "0 / 0 bought", 22,
+            TextAlignmentOptions.TopLeft, UiPalette.TextMuted);
+        var subtitleRect = (RectTransform)subtitleText.transform;
+        subtitleRect.anchorMin = new Vector2(0f, 0f);
+        subtitleRect.anchorMax = new Vector2(1f, 0.45f);
+        subtitleRect.offsetMin = new Vector2(38, 10);
+        subtitleRect.offsetMax = new Vector2(-18, 0);
+
+        var tabUi = root.AddComponent<SkillTreeLinkUI>();
+        var so = new SerializedObject(tabUi);
+        so.FindProperty("background").objectReferenceValue = background;
+        so.FindProperty("selectionRing").objectReferenceValue = ringImage;
+        so.FindProperty("accentBar").objectReferenceValue = barImage;
+        so.FindProperty("titleText").objectReferenceValue = titleText;
+        so.FindProperty("subtitleText").objectReferenceValue = subtitleText;
+        so.FindProperty("button").objectReferenceValue = button;
         so.ApplyModifiedProperties();
 
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, LinkPrefabPath);
+        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, TabPrefabPath);
         Object.DestroyImmediate(root);
         return prefab;
     }
 
     // ------------------------------------------------------------------
-    // SkillTreeBranchTotal.prefab — one label per branch in the header row
+    // SkillTreePanel.prefab — opaque full screen: title bar, tabs left, rows right, one Buy button
     // ------------------------------------------------------------------
 
-    static GameObject BuildBranchTotalPrefab()
-    {
-        var go = new GameObject("BranchTotal", typeof(RectTransform), typeof(TextMeshProUGUI));
-        var rect = go.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(260, 40);
-        var text = go.GetComponent<TextMeshProUGUI>();
-        text.text = "BRANCH 0";
-        text.fontSize = 24;
-        text.fontStyle = FontStyles.Bold;
-        text.alignment = TextAlignmentOptions.MidlineLeft;
-        text.color = UiTheme.TextLight;
-        text.font = UiTheme.DefaultFont();
-        text.raycastTarget = false;
-
-        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(go, BranchTotalPrefabPath);
-        Object.DestroyImmediate(go);
-        return prefab;
-    }
-
-    // ------------------------------------------------------------------
-    // Generic button helper — used by Buy, Back
-    // ------------------------------------------------------------------
-
-    static GameObject CreateButton(Transform parent, string name, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size, Vector2 anchoredPosition)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        if (parent != null) go.transform.SetParent(parent, false);
-        var rect = go.GetComponent<RectTransform>();
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.pivot = pivot;
-        rect.sizeDelta = size;
-        rect.anchoredPosition = anchoredPosition;
-
-        Image image = go.GetComponent<Image>();
-        image.sprite = UiTheme.RoundedPanelSprite;
-        image.type = Image.Type.Sliced;
-        image.color = UiTheme.Surface;
-
-        Button button = go.GetComponent<Button>();
-        button.targetGraphic = image;
-
-        TMP_Text text = UiTheme.Text(go.transform, "Text", label, 24, TextAlignmentOptions.Center, UiTheme.TextLight, FontStyles.Bold);
-        StretchFull((RectTransform)text.transform);
-
-        return go;
-    }
-
-    // ------------------------------------------------------------------
-    // SkillTreePanel.prefab — full-screen, fully opaque, large text throughout
-    // ------------------------------------------------------------------
-
-    static GameObject BuildPanelPrefab(GameObject nodePrefab, GameObject linkPrefab, GameObject branchTotalPrefab)
+    static GameObject BuildPanelPrefab(GameObject rowPrefab, GameObject tabPrefab)
     {
         var root = new GameObject("SkillTreePanel", typeof(RectTransform), typeof(Canvas),
             typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -275,208 +299,187 @@ public static class SkillTreeScreenGenerator
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
 
-        // Fully opaque — this is a separate screen, not a see-through overlay.
         var bgGo = new GameObject("Background", typeof(RectTransform), typeof(Image));
         bgGo.transform.SetParent(root.transform, false);
-        StretchFull((RectTransform)bgGo.transform);
+        UiTheme.StretchFull((RectTransform)bgGo.transform);
         Image bgImage = bgGo.GetComponent<Image>();
         bgImage.sprite = UiTheme.BgGradientSprite;
         bgImage.type = Image.Type.Simple;
         bgImage.color = Color.white;
 
-        var vignetteGo = new GameObject("Vignette", typeof(RectTransform), typeof(Image));
-        vignetteGo.transform.SetParent(bgGo.transform, false);
-        StretchFull((RectTransform)vignetteGo.transform);
-        Image vignetteImage = vignetteGo.GetComponent<Image>();
-        vignetteImage.sprite = UiTheme.VignetteSprite;
-        vignetteImage.type = Image.Type.Simple;
-        vignetteImage.raycastTarget = false;
+        // --- Title bar: what screen this is (left) + the one number that matters (right).
+        // Anchored explicitly rather than via TopStretchX + offset patching: setting offsetMin
+        // after a top-anchored TopStretchX pins the box's BOTTOM edge to the parent's top edge,
+        // which pushed the character name entirely off the top of the screen. ---
+        TMP_Text titleText = UiTheme.Text(bgGo.transform, "ScreenTitleText", "Spend Souls", 30,
+            TextAlignmentOptions.Left, UiPalette.TextMuted, FontStyles.Bold);
+        TopBand((RectTransform)titleText.transform, 0f, 0.5f, 30f, 40f, 60f, 0f);
 
-        // --- Header: character name (left) + souls (right). ---
-        var headerGo = new GameObject("Header", typeof(RectTransform));
-        headerGo.transform.SetParent(bgGo.transform, false);
-        var headerRect = headerGo.GetComponent<RectTransform>();
-        headerRect.anchorMin = new Vector2(0f, 1f);
-        headerRect.anchorMax = new Vector2(1f, 1f);
-        headerRect.pivot = new Vector2(0.5f, 1f);
-        headerRect.sizeDelta = new Vector2(0f, 90f);
-        headerRect.anchoredPosition = Vector2.zero;
+        TMP_Text nameText = UiTheme.Text(bgGo.transform, "CharacterNameText", "Character", 56,
+            TextAlignmentOptions.Left, UiPalette.TextLight, FontStyles.Bold);
+        TopBand((RectTransform)nameText.transform, 0f, 0.55f, 72f, 70f, 60f, 0f);
 
-        var nameGo = new GameObject("CharacterNameText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        nameGo.transform.SetParent(headerGo.transform, false);
-        var nameRect = nameGo.GetComponent<RectTransform>();
-        nameRect.anchorMin = new Vector2(0f, 0f);
-        nameRect.anchorMax = new Vector2(0.5f, 1f);
-        nameRect.offsetMin = new Vector2(50, 0);
-        nameRect.offsetMax = Vector2.zero;
-        var nameText = nameGo.GetComponent<TextMeshProUGUI>();
-        nameText.text = "Character";
-        nameText.fontSize = 46;
-        nameText.alignment = TextAlignmentOptions.MidlineLeft;
-        nameText.color = UiTheme.TextLight;
-        nameText.fontStyle = FontStyles.Bold;
-        nameText.font = UiTheme.DefaultFont();
+        TMP_Text soulsText = UiTheme.Text(bgGo.transform, "SoulsText", "0 souls to spend", 44,
+            TextAlignmentOptions.Right, UiPalette.Gold, FontStyles.Bold);
+        TopBand((RectTransform)soulsText.transform, 0.5f, 1f, 62f, 62f, 0f, 60f);
 
-        var soulsGo = new GameObject("SoulsText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        soulsGo.transform.SetParent(headerGo.transform, false);
-        var soulsRect = soulsGo.GetComponent<RectTransform>();
-        soulsRect.anchorMin = new Vector2(0.5f, 0f);
-        soulsRect.anchorMax = new Vector2(1f, 1f);
-        soulsRect.offsetMin = Vector2.zero;
-        soulsRect.offsetMax = new Vector2(-50, 0);
-        var soulsText = soulsGo.GetComponent<TextMeshProUGUI>();
-        soulsText.text = "Souls: 0";
-        soulsText.fontSize = 40;
-        soulsText.alignment = TextAlignmentOptions.MidlineRight;
-        soulsText.color = UiTheme.Gold;
-        soulsText.fontStyle = FontStyles.Bold;
-        soulsText.font = UiTheme.DefaultFont();
+        // Always-visible current stats — the effect of a purchase without reading any row.
+        // Sits in its own band below the souls total so the two never overlap.
+        TMP_Text statSummaryText = UiTheme.Text(bgGo.transform, "StatSummaryText",
+            "Damage +0%     Health 100     Move speed +0%", 26,
+            TextAlignmentOptions.Right, UiPalette.TextMuted);
+        TopBand((RectTransform)statSummaryText.transform, 0.35f, 1f, 128f, 36f, 0f, 60f);
 
-        // --- Branch totals row: one label per branch, always visible. ---
-        var totalsRowGo = new GameObject("BranchTotalsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-        totalsRowGo.transform.SetParent(bgGo.transform, false);
-        var totalsRowRect = totalsRowGo.GetComponent<RectTransform>();
-        totalsRowRect.anchorMin = new Vector2(0f, 1f);
-        totalsRowRect.anchorMax = new Vector2(1f, 1f);
-        totalsRowRect.pivot = new Vector2(0.5f, 1f);
-        totalsRowRect.sizeDelta = new Vector2(0f, 50f);
-        totalsRowRect.anchoredPosition = new Vector2(0f, -90f);
-        var totalsRowLayout = totalsRowGo.GetComponent<HorizontalLayoutGroup>();
-        totalsRowLayout.childAlignment = TextAnchor.MiddleLeft;
-        totalsRowLayout.spacing = 40;
-        totalsRowLayout.padding = new RectOffset(50, 50, 0, 0);
-        totalsRowLayout.childForceExpandWidth = false;
-        totalsRowLayout.childForceExpandHeight = false;
-
-        // --- Body: node canvas (left, scrollable) + description/Buy panel (right). ---
+        // --- Body: tabs column + rows column. Absolute bands, no fractional fights. ---
         var bodyGo = new GameObject("Body", typeof(RectTransform));
         bodyGo.transform.SetParent(bgGo.transform, false);
         var bodyRect = bodyGo.GetComponent<RectTransform>();
-        bodyRect.anchorMin = new Vector2(0f, 0.1f);
+        bodyRect.anchorMin = new Vector2(0f, 0f);
         bodyRect.anchorMax = new Vector2(1f, 1f);
-        bodyRect.offsetMin = new Vector2(40, 0);
-        bodyRect.offsetMax = new Vector2(-40, -150);
+        bodyRect.offsetMin = new Vector2(60, 190);
+        bodyRect.offsetMax = new Vector2(-60, -184);
 
-        // Node scroll area — left ~65% of the body.
-        var scrollGo = new GameObject("ScrollRect", typeof(RectTransform), typeof(ScrollRect), typeof(Image), typeof(RectMask2D));
-        scrollGo.transform.SetParent(bodyGo.transform, false);
+        var tabsGo = new GameObject("CategoryColumn", typeof(RectTransform), typeof(VerticalLayoutGroup));
+        tabsGo.transform.SetParent(bodyGo.transform, false);
+        var tabsRect = tabsGo.GetComponent<RectTransform>();
+        tabsRect.anchorMin = new Vector2(0f, 0f);
+        tabsRect.anchorMax = new Vector2(0f, 1f);
+        tabsRect.pivot = new Vector2(0f, 1f);
+        tabsRect.sizeDelta = new Vector2(420f, 0f);
+        tabsRect.anchoredPosition = Vector2.zero;
+        var tabsLayout = tabsGo.GetComponent<VerticalLayoutGroup>();
+        tabsLayout.spacing = 14f;
+        tabsLayout.childAlignment = TextAnchor.UpperCenter;
+        tabsLayout.childForceExpandWidth = true;
+        tabsLayout.childForceExpandHeight = false;
+        tabsLayout.childControlWidth = true;
+        tabsLayout.childControlHeight = false;
+
+        // Right side: category heading + scrollable row list.
+        var listGo = new GameObject("UpgradeColumn", typeof(RectTransform));
+        listGo.transform.SetParent(bodyGo.transform, false);
+        var listRect = listGo.GetComponent<RectTransform>();
+        listRect.anchorMin = new Vector2(0f, 0f);
+        listRect.anchorMax = new Vector2(1f, 1f);
+        listRect.offsetMin = new Vector2(452, 0);
+        listRect.offsetMax = Vector2.zero;
+
+        TMP_Text categoryTitleText = UiTheme.Text(listGo.transform, "CategoryTitleText", "Body", 40,
+            TextAlignmentOptions.BottomLeft, UiPalette.TextLight, FontStyles.Bold);
+        UiTheme.TopStretchX(categoryTitleText.gameObject, listGo.transform, 0f, 1f, 0f, 48f);
+
+        TMP_Text categorySummaryText = UiTheme.Text(listGo.transform, "CategorySummaryText",
+            "What this group does.", 26, TextAlignmentOptions.TopLeft, UiPalette.TextMuted);
+        UiTheme.TopStretchX(categorySummaryText.gameObject, listGo.transform, 0f, 1f, 50f, 38f);
+
+        var scrollGo = new GameObject("RowScroll", typeof(RectTransform), typeof(ScrollRect), typeof(RectMask2D));
+        scrollGo.transform.SetParent(listGo.transform, false);
         var scrollRectT = scrollGo.GetComponent<RectTransform>();
         scrollRectT.anchorMin = new Vector2(0f, 0f);
-        scrollRectT.anchorMax = new Vector2(0.65f, 1f);
+        scrollRectT.anchorMax = new Vector2(1f, 1f);
         scrollRectT.offsetMin = Vector2.zero;
-        scrollRectT.offsetMax = new Vector2(-20, 0);
-        Image scrollBg = scrollGo.GetComponent<Image>();
-        scrollBg.sprite = UiTheme.RoundedPanelSprite;
-        scrollBg.type = Image.Type.Sliced;
-        scrollBg.color = UiTheme.SurfaceInset;
+        scrollRectT.offsetMax = new Vector2(0, -100);
 
         var viewportGo = new GameObject("Viewport", typeof(RectTransform));
         viewportGo.transform.SetParent(scrollGo.transform, false);
-        StretchFull((RectTransform)viewportGo.transform);
+        UiTheme.StretchFull((RectTransform)viewportGo.transform);
 
-        // NodeContainer is top-left anchored — SkillTreeScreenController fits its size to actual
-        // content bounds and positions nodes/links in positive-x, negative-y space accordingly.
-        // (Prior bug: node prefab anchor (0.5,0.5) vs a top-left-assumed layout put every node
-        // far outside the viewport with no visible error — verify anchoring matches on any change.)
-        var contentGo = new GameObject("NodeContainer", typeof(RectTransform));
+        // Top-left anchored content driven by a VerticalLayoutGroup + ContentSizeFitter: rows can
+        // never land outside the viewport the way hand-positioned graph nodes did.
+        var contentGo = new GameObject("RowContainer", typeof(RectTransform), typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter));
         contentGo.transform.SetParent(viewportGo.transform, false);
         var contentRect = contentGo.GetComponent<RectTransform>();
         contentRect.anchorMin = new Vector2(0f, 1f);
-        contentRect.anchorMax = new Vector2(0f, 1f);
-        contentRect.pivot = new Vector2(0f, 1f);
-        contentRect.sizeDelta = new Vector2(1600, 900);
+        contentRect.anchorMax = new Vector2(1f, 1f);
+        contentRect.pivot = new Vector2(0.5f, 1f);
+        contentRect.sizeDelta = new Vector2(0f, 0f);
         contentRect.anchoredPosition = Vector2.zero;
-
-        var linkContainerGo = new GameObject("LinkContainer", typeof(RectTransform));
-        linkContainerGo.transform.SetParent(contentGo.transform, false);
-        StretchFull((RectTransform)linkContainerGo.transform);
-        linkContainerGo.transform.SetAsFirstSibling(); // links render behind nodes
+        var contentLayout = contentGo.GetComponent<VerticalLayoutGroup>();
+        contentLayout.spacing = 14f;
+        contentLayout.padding = new RectOffset(0, 12, 0, 12);
+        contentLayout.childAlignment = TextAnchor.UpperCenter;
+        contentLayout.childForceExpandWidth = true;
+        contentLayout.childForceExpandHeight = false;
+        contentLayout.childControlWidth = true;
+        contentLayout.childControlHeight = false;
+        var contentFitter = contentGo.GetComponent<ContentSizeFitter>();
+        contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         var scrollRect = scrollGo.GetComponent<ScrollRect>();
         scrollRect.viewport = (RectTransform)viewportGo.transform;
         scrollRect.content = contentRect;
-        scrollRect.horizontal = true;
+        scrollRect.horizontal = false;
         scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 40f;
 
-        // Description + Buy panel — right ~35% of the body.
-        var infoGo = new GameObject("InfoPanel", typeof(RectTransform), typeof(Image));
-        infoGo.transform.SetParent(bodyGo.transform, false);
-        var infoRect = infoGo.GetComponent<RectTransform>();
-        infoRect.anchorMin = new Vector2(0.67f, 0f);
-        infoRect.anchorMax = new Vector2(1f, 1f);
-        infoRect.offsetMin = Vector2.zero;
-        infoRect.offsetMax = Vector2.zero;
-        Image infoBg = infoGo.GetComponent<Image>();
-        infoBg.sprite = UiTheme.RoundedPanelSprite;
-        infoBg.type = Image.Type.Sliced;
-        infoBg.color = UiTheme.Surface;
+        // --- Footer: one Buy button, Back, and a single line of controls help. ---
+        Button buyButton = UiTheme.Button(bgGo.transform, "BuyButton", "Buy", new Vector2(520, 96));
+        var buyRect = (RectTransform)buyButton.transform;
+        buyRect.anchorMin = new Vector2(1f, 0f);
+        buyRect.anchorMax = new Vector2(1f, 0f);
+        buyRect.pivot = new Vector2(1f, 0f);
+        buyRect.anchoredPosition = new Vector2(-60, 56);
+        buyButton.image.color = UiPalette.Purchased;
+        TMP_Text buyButtonText = buyButton.GetComponentInChildren<TMP_Text>();
+        buyButtonText.fontSize = 32;
 
-        var descGo = new GameObject("DescriptionText", typeof(RectTransform), typeof(TextMeshProUGUI));
-        descGo.transform.SetParent(infoGo.transform, false);
-        var descRect = descGo.GetComponent<RectTransform>();
-        descRect.anchorMin = new Vector2(0f, 0.25f);
-        descRect.anchorMax = new Vector2(1f, 1f);
-        descRect.offsetMin = new Vector2(30, 0);
-        descRect.offsetMax = new Vector2(-30, -30);
-        var descText = descGo.GetComponent<TextMeshProUGUI>();
-        descText.text = "Select a node to see what it does.";
-        descText.fontSize = 28;
-        descText.alignment = TextAlignmentOptions.TopLeft;
-        descText.color = UiTheme.TextLight;
-        descText.font = UiTheme.DefaultFont();
-        descText.enableWordWrapping = true;
+        Button backButton = UiTheme.Button(bgGo.transform, "BackButton", "Back", new Vector2(280, 96));
+        var backRect = (RectTransform)backButton.transform;
+        backRect.anchorMin = new Vector2(0f, 0f);
+        backRect.anchorMax = new Vector2(0f, 0f);
+        backRect.pivot = new Vector2(0f, 0f);
+        backRect.anchoredPosition = new Vector2(60, 56);
 
-        GameObject buyGo = CreateButton(infoGo.transform, "BuyButton", "Buy",
-            new Vector2(0.5f, 0.05f), new Vector2(0.5f, 0.05f), new Vector2(0.5f, 0f), new Vector2(360, 90), Vector2.zero);
-        Button buyButton = buyGo.GetComponent<Button>();
-        TMP_Text buyButtonText = buyGo.GetComponentInChildren<TMP_Text>();
-        buyButtonText.fontSize = 30;
-
-        // --- Back button, bottom-left, always reachable. ---
-        GameObject backButton = CreateButton(bgGo.transform, "BackButton", "Back",
-            new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(240, 80), new Vector2(40, 40));
+        TMP_Text helpText = UiTheme.Text(bgGo.transform, "HelpText",
+            "Left / Right: choose a group     Up / Down: choose an upgrade     A: buy     B: back",
+            24, TextAlignmentOptions.Center, UiPalette.TextMuted);
+        var helpRect = (RectTransform)helpText.transform;
+        helpRect.anchorMin = new Vector2(0f, 0f);
+        helpRect.anchorMax = new Vector2(1f, 0f);
+        helpRect.pivot = new Vector2(0.5f, 0f);
+        helpRect.sizeDelta = new Vector2(-720, 34f);
+        helpRect.anchoredPosition = new Vector2(0f, 14f);
 
         var panel = root.AddComponent<SkillTreeScreenController>();
         var so = new SerializedObject(panel);
         so.FindProperty("panelRoot").objectReferenceValue = root;
         so.FindProperty("characterNameText").objectReferenceValue = nameText;
         so.FindProperty("soulsText").objectReferenceValue = soulsText;
-        so.FindProperty("branchTotalsContainer").objectReferenceValue = totalsRowGo.GetComponent<RectTransform>();
-        so.FindProperty("branchTotalPrefab").objectReferenceValue = branchTotalPrefab;
-        so.FindProperty("nodeContainer").objectReferenceValue = contentRect;
-        so.FindProperty("nodePrefab").objectReferenceValue = nodePrefab;
-        so.FindProperty("linkContainer").objectReferenceValue = linkContainerGo.GetComponent<RectTransform>();
-        so.FindProperty("linkPrefab").objectReferenceValue = linkPrefab;
-        so.FindProperty("descriptionText").objectReferenceValue = descText;
+        so.FindProperty("categoryContainer").objectReferenceValue = tabsRect;
+        so.FindProperty("categoryPrefab").objectReferenceValue = tabPrefab;
+        so.FindProperty("rowContainer").objectReferenceValue = contentRect;
+        so.FindProperty("rowPrefab").objectReferenceValue = rowPrefab;
+        so.FindProperty("rowScrollRect").objectReferenceValue = scrollRect;
+        so.FindProperty("categoryTitleText").objectReferenceValue = categoryTitleText;
+        so.FindProperty("categorySummaryText").objectReferenceValue = categorySummaryText;
+        so.FindProperty("statSummaryText").objectReferenceValue = statSummaryText;
+        so.FindProperty("helpText").objectReferenceValue = helpText;
         so.FindProperty("buyButton").objectReferenceValue = buyButton;
         so.FindProperty("buyButtonText").objectReferenceValue = buyButtonText;
         so.ApplyModifiedProperties();
 
-        Button backBtn = backButton.GetComponent<Button>();
-        // No persisted onClick — CharacterSelectionManager drives Close() via input, but the mouse
-        // path needs a listener too. Wired here since it's a fixed, non-per-instance callback.
-        UnityEditor.Events.UnityEventTools.AddPersistentListener(backBtn.onClick, panel.Close);
+        // CharacterSelectionManager drives Close() via input, but the mouse path needs a listener too.
+        UnityEditor.Events.UnityEventTools.AddPersistentListener(backButton.onClick, panel.Close);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, PanelPrefabPath);
         Object.DestroyImmediate(root);
         return prefab;
     }
 
-    static void StretchFull(RectTransform rect)
+    /// <summary>Places a header text band a fixed distance below the parent's top edge, with its own
+    /// left/right padding. Both edges are anchored to the parent top (anchorMin.y == anchorMax.y == 1)
+    /// and the box hangs downward from there, so writing offsetMin/offsetMax afterwards cannot move
+    /// the band off-screen the way patching a stretched rect's offsets does.</summary>
+    static void TopBand(RectTransform rect, float anchorMinX, float anchorMaxX,
+        float yOffsetFromTop, float height, float padLeft, float padRight)
     {
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-    }
-
-    static void EnsureFolder(string path)
-    {
-        if (AssetDatabase.IsValidFolder(path)) return;
-        string parent = Path.GetDirectoryName(path).Replace('\\', '/');
-        string leaf = Path.GetFileName(path);
-        EnsureFolder(parent);
-        AssetDatabase.CreateFolder(parent, leaf);
+        rect.anchorMin = new Vector2(anchorMinX, 1f);
+        rect.anchorMax = new Vector2(anchorMaxX, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.offsetMin = new Vector2(padLeft, -(yOffsetFromTop + height));
+        rect.offsetMax = new Vector2(-padRight, -yOffsetFromTop);
     }
 
     // ------------------------------------------------------------------
@@ -524,27 +527,42 @@ public static class SkillTreeScreenGenerator
     }
 
     // ------------------------------------------------------------------
-    // AssCap starting skill trees — plain-language descriptions so the
-    // in-panel DescriptionText explains each node without extra lookups.
+    // Upgrade groups — plain-language rows a non-gamer can read once and understand.
+    // Every row says what it does in outcome terms ("hit harder", "ready sooner"), never in
+    // jargon ("magnitude +0.25x"). Repeatable rows get rising prices so the ladder still has a
+    // decision in it without needing separate "major" nodes.
+    //
+    // Every playable character gets the same four groups. The displayed "before" values are read
+    // from that character's own skill assets (charDir), so a character tuned to a different
+    // cooldown or damage shows its real numbers rather than AssCap's.
     // ------------------------------------------------------------------
 
-    static void AuthorAssCapTrees()
+    /// <summary>Authors the four upgrade groups onto a character's CharacterDefinition. Slot 2's
+    /// tree differs per character (shuriken vs laser), so the caller picks the builder — everything
+    /// else (Body, Whirlwind, Battle Cry) is shared.</summary>
+    static void AuthorTrees(string definitionPath, string charDir, System.Func<string, SkillTreeDefinition> buildSlot2Tree)
     {
-        var def = AssetDatabase.LoadAssetAtPath<CharacterDefinition>(AssCapDefinitionPath);
+        var def = AssetDatabase.LoadAssetAtPath<CharacterDefinition>(definitionPath);
         if (def == null)
         {
-            Debug.LogError($"SkillTreeScreenGenerator: no CharacterDefinition at {AssCapDefinitionPath} — run 'LionQuest/Generate/Character Selection' first.");
+            Debug.LogError($"SkillTreeScreenGenerator: no CharacterDefinition at {definitionPath} — run the generator that creates it first ('Character Selection' for AssCap, 'Character 67' for 67).");
             return;
         }
 
-        def.skillTrees = new[] { BuildAttributesTree(), BuildWhirlwindTree(), BuildShurikenTree(), BuildBattleCryTree() };
+        def.skillTrees = new[]
+        {
+            BuildBodyTree(),
+            BuildWhirlwindTree(charDir),
+            buildSlot2Tree(charDir),
+            BuildBattleCryTree(charDir),
+        };
 
         EditorUtility.SetDirty(def);
         AssetDatabase.SaveAssets();
     }
 
-    static SkillNodeDefinition Node(string id, string name, string description, SkillEffect effect, SkillEffectOp op,
-        float value, int cost, int maxRank, SkillNodeTier tier, int gx, int gy, params string[] prereqs)
+    static SkillNodeDefinition Row(string id, string name, string description, SkillEffect effect,
+        float value, int cost, int costIncrement, int maxRank, SkillEffectOp op = SkillEffectOp.Add)
     {
         return new SkillNodeDefinition
         {
@@ -555,51 +573,42 @@ public static class SkillTreeScreenGenerator
             op = op,
             value = value,
             cost = cost,
+            costIncrement = costIncrement,
             maxRank = maxRank,
-            tier = tier,
-            prereqNodeIds = prereqs,
-            gridPos = new Vector2Int(gx, gy),
         };
     }
+
+    static SkillNodeDefinition UnlockRow(string description, int cost) =>
+        Row("unlock", "Unlock this skill", description, SkillEffect.Unlock, 1f, cost, 0, 1);
 
     static SkillDisplayBase DisplayBase(SkillEffect effect, float baseValue, string unit) =>
         new SkillDisplayBase { effect = effect, baseValue = baseValue, unit = unit };
 
-    static SkillTreeDefinition BuildAttributesTree()
+    static SkillTreeDefinition BuildBodyTree()
     {
         return new SkillTreeDefinition
         {
             skillId = "attributes",
-            displayName = "Attributes",
+            displayName = "Body",
             skillSlot = 0,
             branchColor = new Color(0.4f, 0.8f, 0.35f),
             target = SkillEffectTarget.Attribute,
+            summary = "Always available. Makes your character stronger no matter which skills you use.",
             nodes = new[]
             {
-                Node("root", "Attributes", "Spend souls on Strength, Health, and Speed.",
-                    SkillEffect.Unlock, SkillEffectOp.Add, 0f, 0, 1, SkillNodeTier.Keystone, 0, 0),
-
-                Node("strength_1", "+1 Strength", "Increases damage dealt.",
-                    SkillEffect.Strength, SkillEffectOp.Add, 1f, 10, 5, SkillNodeTier.Minor, -2, 1, "root"),
-                Node("strength_2", "+1 Strength (Major)", "A bigger jump in damage dealt.",
-                    SkillEffect.Strength, SkillEffectOp.Add, 1f, 25, 3, SkillNodeTier.Major, -2, 2, "strength_1"),
-
-                Node("health_1", "+1 Health", "Increases max health.",
-                    SkillEffect.Health, SkillEffectOp.Add, 1f, 10, 5, SkillNodeTier.Minor, 0, 1, "root"),
-                Node("health_2", "+1 Health (Major)", "A bigger jump in max health.",
-                    SkillEffect.Health, SkillEffectOp.Add, 1f, 25, 3, SkillNodeTier.Major, 0, 2, "health_1"),
-
-                Node("speed_1", "+1 Speed", "Increases move speed.",
-                    SkillEffect.Speed, SkillEffectOp.Add, 1f, 10, 5, SkillNodeTier.Minor, 2, 1, "root"),
-                Node("speed_2", "+1 Speed (Major)", "A bigger jump in move speed.",
-                    SkillEffect.Speed, SkillEffectOp.Add, 1f, 25, 3, SkillNodeTier.Major, 2, 2, "speed_1"),
+                Row("strength_1", "Hit harder", "Every attack you make deals 20% more damage.",
+                    SkillEffect.Strength, 1f, 10, 5, 5),
+                Row("health_1", "Take more hits", "Adds 20 more health, so you survive longer.",
+                    SkillEffect.Health, 1f, 10, 5, 5),
+                Row("speed_1", "Move faster", "You walk and run 10% faster.",
+                    SkillEffect.Speed, 1f, 10, 5, 5),
             },
         };
     }
 
-    static SkillTreeDefinition BuildWhirlwindTree()
+    static SkillTreeDefinition BuildWhirlwindTree(string charDir)
     {
-        var skill1 = AssetDatabase.LoadAssetAtPath<AttackData>("Assets/Characters/AssassinoCapuchino/Skill1Attack.asset");
+        var skill1 = AssetDatabase.LoadAssetAtPath<AttackData>(charDir + "/Skill1Attack.asset");
         float baseCooldown = skill1 != null ? skill1.cooldown : 10f;
 
         return new SkillTreeDefinition
@@ -608,37 +617,31 @@ public static class SkillTreeScreenGenerator
             displayName = "Whirlwind",
             skillSlot = 1,
             branchColor = new Color(0.35f, 0.55f, 0.9f),
-            displayBases = new[] { DisplayBase(SkillEffect.Cooldown, baseCooldown, "s") },
+            summary = "Skill 1. A spin attack that hits every enemy standing around you.",
+            displayBases = new[]
+            {
+                DisplayBase(SkillEffect.Cooldown, baseCooldown, "s"),
+                DisplayBase(SkillEffect.Area, 3f, "m"),
+            },
             nodes = new[]
             {
-                Node("unlock", "Unlock", "Lets you use Whirlwind, a spinning attack that hits everything around you.",
-                    SkillEffect.Unlock, SkillEffectOp.Add, 1f, 20, 1, SkillNodeTier.Keystone, 0, 0),
-
-                Node("damage_1", "Damage +0.5x", "Whirlwind hits harder.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 0.5f, 15, 1, SkillNodeTier.Minor, -1, 1, "unlock"),
-                Node("damage_2", "Damage +1.0x", "Whirlwind hits even harder.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 1.0f, 35, 1, SkillNodeTier.Major, -1, 2, "damage_1"),
-
-                Node("area_1", "Area +1", "Whirlwind hits enemies farther away from you.",
-                    SkillEffect.Area, SkillEffectOp.Add, 1f, 20, 1, SkillNodeTier.Minor, 0, 1, "unlock"),
-
-                Node("cooldown_2s", "Cooldown -2s", "Whirlwind is ready to use 2 seconds sooner.",
-                    SkillEffect.Cooldown, SkillEffectOp.Add, -2f, 15, 1, SkillNodeTier.Minor, 1, 1, "unlock"),
-                Node("cooldown_3s", "Cooldown -3s", "Whirlwind is ready to use 3 more seconds sooner.",
-                    SkillEffect.Cooldown, SkillEffectOp.Add, -3f, 40, 1, SkillNodeTier.Major, 1, 2, "cooldown_2s"),
-
-                // Converge: either damage or area path opens the outer keystone-adjacent node.
-                Node("mastery", "Whirlwind Mastery", "A final push of damage and area, from mastering either path.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 0.5f, 50, 1, SkillNodeTier.Major, 0, 3, "damage_2", "area_1"),
+                UnlockRow("Lets you use Whirlwind: a spin that hits everything around you.", 20),
+                Row("damage", "Hit harder", "Whirlwind does more damage each time you buy this.",
+                    SkillEffect.Damage, 0.5f, 15, 10, 4),
+                Row("area", "Reach further", "Whirlwind hits enemies standing further away.",
+                    SkillEffect.Area, 1f, 20, 10, 3),
+                Row("cooldown", "Ready sooner", "Cuts 2 seconds off the wait before you can use it again.",
+                    SkillEffect.Cooldown, -2f, 15, 15, 3),
             },
         };
     }
 
-    static SkillTreeDefinition BuildShurikenTree()
+    static SkillTreeDefinition BuildShurikenTree(string charDir)
     {
-        var shuriken = AssetDatabase.LoadAssetAtPath<ProjectileSkillData>("Assets/Characters/AssassinoCapuchino/ShurikenProjectile.asset");
+        var shuriken = AssetDatabase.LoadAssetAtPath<ProjectileSkillData>(charDir + "/ShurikenProjectile.asset");
         float baseCooldown = shuriken != null ? shuriken.cooldown : 2f;
         float baseDamage = shuriken != null ? shuriken.damage : 25f;
+        int baseCount = shuriken != null && shuriken.spawnTimesNormalized != null ? shuriken.spawnTimesNormalized.Length : 2;
 
         return new SkillTreeDefinition
         {
@@ -646,37 +649,66 @@ public static class SkillTreeScreenGenerator
             displayName = "Shuriken",
             skillSlot = 2,
             branchColor = new Color(0.65f, 0.35f, 0.85f),
+            summary = "Skill 2. Throws blades that hit enemies from a distance.",
             displayBases = new[]
             {
                 DisplayBase(SkillEffect.Cooldown, baseCooldown, "s"),
                 DisplayBase(SkillEffect.Damage, baseDamage, ""),
+                DisplayBase(SkillEffect.ProjectileCount, baseCount, ""),
             },
             nodes = new[]
             {
-                Node("unlock", "Unlock", "Lets you use Shuriken, a ranged throw that hits enemies from a distance.",
-                    SkillEffect.Unlock, SkillEffectOp.Add, 1f, 20, 1, SkillNodeTier.Keystone, 0, 0),
-
-                Node("damage_1", "Damage +5", "Each shuriken hits harder.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 5f, 15, 1, SkillNodeTier.Minor, -1, 1, "unlock"),
-                Node("damage_2", "Damage +5", "Each shuriken hits even harder.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 5f, 30, 1, SkillNodeTier.Major, -1, 2, "damage_1"),
-
-                Node("count_1", "Projectile +1", "Throw one extra shuriken per use.",
-                    SkillEffect.ProjectileCount, SkillEffectOp.Add, 1f, 30, 1, SkillNodeTier.Major, 1, 1, "unlock"),
-
-                Node("cooldown_2s", "Cooldown -2s", "Shuriken is ready to use 2 seconds sooner.",
-                    SkillEffect.Cooldown, SkillEffectOp.Add, -2f, 15, 1, SkillNodeTier.Minor, 0, 1, "unlock"),
-
-                // Converge: either the damage chain or the count node opens this.
-                Node("mastery", "Shuriken Mastery", "A final push of damage, from mastering either path.",
-                    SkillEffect.Damage, SkillEffectOp.Add, 10f, 45, 1, SkillNodeTier.Major, 0, 2, "damage_2", "count_1"),
+                UnlockRow("Lets you use Shuriken: thrown blades that hit from a distance.", 20),
+                Row("damage", "Hit harder", "Each blade does 5 more damage.",
+                    SkillEffect.Damage, 5f, 15, 10, 4),
+                Row("count", "Throw one more", "Throws one extra blade every time you use the skill.",
+                    SkillEffect.ProjectileCount, 1f, 30, 20, 3),
+                Row("cooldown", "Ready sooner", "Cuts 0.5 seconds off the wait before you can throw again.",
+                    SkillEffect.Cooldown, -0.5f, 15, 15, 2),
             },
         };
     }
 
-    static SkillTreeDefinition BuildBattleCryTree()
+    static SkillTreeDefinition BuildLaserTree(string charDir)
     {
-        var battleCry = AssetDatabase.LoadAssetAtPath<BattleCrySkillData>("Assets/Characters/AssassinoCapuchino/BattleCry.asset");
+        var laser = AssetDatabase.LoadAssetAtPath<LaserBeamSkillData>(charDir + "/LaserBeam.asset");
+        float baseCooldown = laser != null ? laser.cooldown : 3f;
+        float baseDamage = laser != null ? laser.damage : 45f;
+        float baseRange = laser != null ? laser.range : 20f;
+        float basePierce = laser != null ? laser.pierceCount : 1;
+
+        return new SkillTreeDefinition
+        {
+            skillId = "laser",
+            displayName = "Laser Beam",
+            skillSlot = 2,
+            branchColor = new Color(0.3f, 0.85f, 0.85f),
+            summary = "Skill 2. Fires an instant beam from your finger that burns everything in a straight line.",
+            displayBases = new[]
+            {
+                DisplayBase(SkillEffect.Cooldown, baseCooldown, "s"),
+                DisplayBase(SkillEffect.Damage, baseDamage, ""),
+                DisplayBase(SkillEffect.Range, baseRange, "m"),
+                DisplayBase(SkillEffect.PierceCount, basePierce, ""),
+            },
+            nodes = new[]
+            {
+                UnlockRow("Lets you use Laser Beam: an instant beam that burns enemies in a line.", 20),
+                Row("damage", "Hit harder", "The beam does 10 more damage.",
+                    SkillEffect.Damage, 10f, 15, 10, 4),
+                Row("range", "Reach further", "The beam reaches 5 meters further.",
+                    SkillEffect.Range, 5f, 20, 10, 3),
+                Row("pierce", "Burn through more", "The beam passes through one more enemy.",
+                    SkillEffect.PierceCount, 1f, 30, 20, 3),
+                Row("cooldown", "Ready sooner", "Cuts 0.5 seconds off the wait before you can fire again.",
+                    SkillEffect.Cooldown, -0.5f, 15, 15, 2),
+            },
+        };
+    }
+
+    static SkillTreeDefinition BuildBattleCryTree(string charDir)
+    {
+        var battleCry = AssetDatabase.LoadAssetAtPath<BattleCrySkillData>(charDir + "/BattleCry.asset");
         float baseCooldown = battleCry != null ? battleCry.cooldown : 10f;
         float baseDuration = battleCry != null ? battleCry.duration : 5f;
 
@@ -686,32 +718,22 @@ public static class SkillTreeScreenGenerator
             displayName = "Battle Cry",
             skillSlot = 3,
             branchColor = new Color(0.85f, 0.3f, 0.25f),
+            summary = "Skill 3. A shout that makes you run much faster for a few seconds.",
             displayBases = new[]
             {
                 DisplayBase(SkillEffect.Cooldown, baseCooldown, "s"),
                 DisplayBase(SkillEffect.Duration, baseDuration, "s"),
+                DisplayBase(SkillEffect.Magnitude, 2f, "x"),
             },
             nodes = new[]
             {
-                Node("unlock", "Unlock", "Lets you use Battle Cry, a shout that makes you move faster for a few seconds.",
-                    SkillEffect.Unlock, SkillEffectOp.Add, 1f, 20, 1, SkillNodeTier.Keystone, 0, 0),
-
-                Node("magnitude_1", "Magnitude +0.25x", "Battle Cry makes you move even faster.",
-                    SkillEffect.Magnitude, SkillEffectOp.Add, 0.25f, 15, 1, SkillNodeTier.Minor, -1, 1, "unlock"),
-                Node("magnitude_2", "Magnitude +0.5x", "Battle Cry makes you move a lot faster.",
-                    SkillEffect.Magnitude, SkillEffectOp.Add, 0.5f, 35, 1, SkillNodeTier.Major, -1, 2, "magnitude_1"),
-
-                Node("duration_1", "Duration +1s", "Battle Cry's speed boost lasts 1 second longer.",
-                    SkillEffect.Duration, SkillEffectOp.Add, 1f, 20, 1, SkillNodeTier.Minor, 1, 1, "unlock"),
-                Node("duration_2", "Duration +2s", "Battle Cry's speed boost lasts 2 more seconds.",
-                    SkillEffect.Duration, SkillEffectOp.Add, 2f, 40, 1, SkillNodeTier.Major, 1, 2, "duration_1"),
-
-                Node("cooldown_2s", "Cooldown -2s", "Battle Cry is ready to use 2 seconds sooner.",
-                    SkillEffect.Cooldown, SkillEffectOp.Add, -2f, 15, 1, SkillNodeTier.Minor, 0, 1, "unlock"),
-
-                // Converge: either magnitude or duration chain opens this outer node.
-                Node("mastery", "Battle Cry Mastery", "A final push of speed and duration, from mastering either path.",
-                    SkillEffect.Magnitude, SkillEffectOp.Add, 0.25f, 50, 1, SkillNodeTier.Major, 0, 3, "magnitude_2", "duration_2"),
+                UnlockRow("Lets you use Battle Cry: a shout that makes you run faster.", 20),
+                Row("magnitude", "Run even faster", "The speed boost gets stronger.",
+                    SkillEffect.Magnitude, 0.25f, 15, 10, 4),
+                Row("duration", "Lasts longer", "The speed boost lasts 1 second longer.",
+                    SkillEffect.Duration, 1f, 20, 10, 4),
+                Row("cooldown", "Ready sooner", "Cuts 2 seconds off the wait before you can shout again.",
+                    SkillEffect.Cooldown, -2f, 15, 15, 3),
             },
         };
     }

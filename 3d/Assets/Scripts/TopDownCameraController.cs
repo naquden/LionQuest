@@ -17,8 +17,11 @@ public class TopDownCameraController : MonoBehaviour
     [SerializeField] private bool autoFindPlayers = false;
     
     [Header("Camera Position")]
-    [SerializeField] private float distance = 15f; // Distance from target
-    [SerializeField] private float height = 10f; // Height above target
+    // Defaults match what every player-following scene is generated with (see Level1Generator /
+    // AgentGymGenerator), so a rig added by hand frames the player like the shipped ones instead of
+    // needing the numbers rediscovered.
+    [SerializeField] private float distance = 11f; // Distance from target
+    [SerializeField] private float height = 0f; // Height above target
     [SerializeField] private float followSpeed = 10f;
     [SerializeField] private Vector3 lookAtOffset = Vector3.zero; // Offset for where camera looks (useful for aiming above/below player)
     

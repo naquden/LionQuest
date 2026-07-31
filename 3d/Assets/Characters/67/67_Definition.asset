@@ -1,0 +1,229 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a77048ebdd0d749bd922bfeb1362b063, type: 3}
+  m_Name: 67_Definition
+  m_EditorClassIdentifier: LionQuest.Runtime::CharacterDefinition
+  characterID: 67
+  displayName: 67
+  portrait: {fileID: 0}
+  portraitLocked: {fileID: 0}
+  unlockedByDefault: 1
+  playerPrefab: {fileID: 226482859916651790, guid: 47455fb7964bf4e7bbf476309e871618, type: 3}
+  baseMaxHealth: 70
+  baseMoveSpeed: 6
+  skillTrees:
+  - skillId: attributes
+    displayName: Body
+    skillSlot: 0
+    branchColor: {r: 0.4, g: 0.8, b: 0.35, a: 1}
+    target: 1
+    summary: Always available. Makes your character stronger no matter which skills
+      you use.
+    displayBases: []
+    nodes:
+    - nodeId: strength_1
+      displayName: Hit harder
+      description: Every attack you make deals 20% more damage.
+      effect: 7
+      op: 0
+      value: 1
+      cost: 10
+      costIncrement: 5
+      maxRank: 5
+    - nodeId: health_1
+      displayName: Take more hits
+      description: Adds 20 more health, so you survive longer.
+      effect: 8
+      op: 0
+      value: 1
+      cost: 10
+      costIncrement: 5
+      maxRank: 5
+    - nodeId: speed_1
+      displayName: Move faster
+      description: You walk and run 10% faster.
+      effect: 9
+      op: 0
+      value: 1
+      cost: 10
+      costIncrement: 5
+      maxRank: 5
+  - skillId: whirlwind
+    displayName: Whirlwind
+    skillSlot: 1
+    branchColor: {r: 0.35, g: 0.55, b: 0.9, a: 1}
+    target: 0
+    summary: Skill 1. A spin attack that hits every enemy standing around you.
+    displayBases:
+    - effect: 2
+      baseValue: 10
+      unit: s
+    - effect: 3
+      baseValue: 3
+      unit: m
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock this skill
+      description: 'Lets you use Whirlwind: a spin that hits everything around you.'
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      costIncrement: 0
+      maxRank: 1
+    - nodeId: damage
+      displayName: Hit harder
+      description: Whirlwind does more damage each time you buy this.
+      effect: 1
+      op: 0
+      value: 0.5
+      cost: 15
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: area
+      displayName: Reach further
+      description: Whirlwind hits enemies standing further away.
+      effect: 3
+      op: 0
+      value: 1
+      cost: 20
+      costIncrement: 10
+      maxRank: 3
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 2 seconds off the wait before you can use it again.
+      effect: 2
+      op: 0
+      value: -2
+      cost: 15
+      costIncrement: 15
+      maxRank: 3
+  - skillId: laser
+    displayName: Laser Beam
+    skillSlot: 2
+    branchColor: {r: 0.3, g: 0.85, b: 0.85, a: 1}
+    target: 0
+    summary: Skill 2. Fires an instant beam from your finger that burns everything
+      in a straight line.
+    displayBases:
+    - effect: 2
+      baseValue: 3
+      unit: s
+    - effect: 1
+      baseValue: 45
+      unit: 
+    - effect: 10
+      baseValue: 20
+      unit: m
+    - effect: 11
+      baseValue: 1
+      unit: 
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock this skill
+      description: 'Lets you use Laser Beam: an instant beam that burns enemies in
+        a line.'
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      costIncrement: 0
+      maxRank: 1
+    - nodeId: damage
+      displayName: Hit harder
+      description: The beam does 10 more damage.
+      effect: 1
+      op: 0
+      value: 10
+      cost: 15
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: range
+      displayName: Reach further
+      description: The beam reaches 5 meters further.
+      effect: 10
+      op: 0
+      value: 5
+      cost: 20
+      costIncrement: 10
+      maxRank: 3
+    - nodeId: pierce
+      displayName: Burn through more
+      description: The beam passes through one more enemy.
+      effect: 11
+      op: 0
+      value: 1
+      cost: 30
+      costIncrement: 20
+      maxRank: 3
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 0.5 seconds off the wait before you can fire again.
+      effect: 2
+      op: 0
+      value: -0.5
+      cost: 15
+      costIncrement: 15
+      maxRank: 2
+  - skillId: battlecry
+    displayName: Battle Cry
+    skillSlot: 3
+    branchColor: {r: 0.85, g: 0.3, b: 0.25, a: 1}
+    target: 0
+    summary: Skill 3. A shout that makes you run much faster for a few seconds.
+    displayBases:
+    - effect: 2
+      baseValue: 10
+      unit: s
+    - effect: 4
+      baseValue: 5
+      unit: s
+    - effect: 5
+      baseValue: 2
+      unit: x
+    nodes:
+    - nodeId: unlock
+      displayName: Unlock this skill
+      description: 'Lets you use Battle Cry: a shout that makes you run faster.'
+      effect: 0
+      op: 0
+      value: 1
+      cost: 20
+      costIncrement: 0
+      maxRank: 1
+    - nodeId: magnitude
+      displayName: Run even faster
+      description: The speed boost gets stronger.
+      effect: 5
+      op: 0
+      value: 0.25
+      cost: 15
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: duration
+      displayName: Lasts longer
+      description: The speed boost lasts 1 second longer.
+      effect: 4
+      op: 0
+      value: 1
+      cost: 20
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 2 seconds off the wait before you can shout again.
+      effect: 2
+      op: 0
+      value: -2
+      cost: 15
+      costIncrement: 15
+      maxRank: 3

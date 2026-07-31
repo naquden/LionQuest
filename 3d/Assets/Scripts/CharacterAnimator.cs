@@ -81,7 +81,15 @@ public class CharacterAnimator : MonoBehaviour
     /// Returns whether the character is currently attacking
     /// </summary>
     public bool IsAttacking => isAttacking;
-    
+
+    /// <summary>Reference speed the Speed parameter normalizes against. Call this whenever a
+    /// character's move speed is set from a source other than the authored Inspector value (e.g. a
+    /// CharacterDefinition), so the run blend still saturates at the character's real top speed.</summary>
+    public void SetMaxSpeedForNormalization(float value)
+    {
+        maxSpeedForNormalization = value;
+    }
+
     private void Awake()
     {
         animator = GetComponent<Animator>();

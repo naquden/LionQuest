@@ -55,7 +55,7 @@ Hard rules:
 | `Assets/Tests/PlayMode/*.cs` | Existing suites: `SmokeTests`, `CharacterSelectFlowTests`, `SkillTreeUpgradeTests`. |
 | `Assets/Scripts/LionQuest.Runtime.asmdef`, `Assets/Editor/LionQuest.Editor.asmdef`, `Assets/Tests/PlayMode/LionQuest.Tests.PlayMode.asmdef` | Assembly definitions that let tests see game code. Already wired — don't touch unless adding a new package reference. |
 | `Logs/test-results.xml` | NUnit3 XML, parsed by the launcher for pass/fail. |
-| `Logs/test-<name>.png` | Screenshots dropped by every `Shot("<name>")` call — read these back, don't just trust the assertion passed. |
+| `screenshots/test-<name>.png` | Screenshots dropped by every `Shot("<name>")` call — read these back, don't just trust the assertion passed. |
 
 ## Workflow
 
@@ -108,6 +108,13 @@ Model per step in brackets — see [Model routing](#model-routing-which-model-ru
    step that actually closes the loop — a passing assertion can still hide a visually broken
    screen (blank preview boxes, misaligned UI, wrong color). Only report success after having
    looked at the pixels.
+   - **All verification screenshots go to `<project>/screenshots/`** — that is where `Shot()` and
+     `AgentBatch.CaptureToPng()` write, and it is the only place they may be written. Never
+     `Logs/` (rewritten each run) and never `Temp/` or `temp/` (same directory on this
+     case-insensitive filesystem; Unity deletes it on editor quit, so the proof vanishes before
+     it can be read). Any new capture path must reuse those two helpers rather than picking its
+     own directory. The dir is gitignored — screenshots are proof for the session, not artifacts
+     to commit.
 6. **[escalate to opus] If a test fails, read `Logs/agent-test.log` and `Logs/test-results.xml`** before assuming
    it's a harness bug. In practice most failures found so far were *real* product bugs
    (see Known gotchas) or a wrong assumption in the test itself (wrong button binding, wrong

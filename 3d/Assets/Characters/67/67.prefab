@@ -1,5 +1,36 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3093640578144253731
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2320182844793796651}
+  m_Layer: 0
+  m_Name: AttackPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2320182844793796651
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3093640578144253731}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 1, z: 0.8}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 607828009113335732}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1145542853486104671
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -54,7 +85,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       propertyPath: m_TagString
@@ -62,7 +93,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2320182844793796651}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       insertIndex: -1
@@ -76,6 +110,18 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7119271511133847631}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 439192832152557041}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1111574233650148706}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1040616916856977904}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7770970617440188966}
   m_SourcePrefab: {fileID: 100100000, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
 --- !u!1 &226482859916651790 stripped
 GameObject:
@@ -117,7 +163,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CharacterAnimator
   speedParameter: Speed
-  isWalkingParameter: IsWalking
   isSprintingParameter: IsSprinting
   attackTriggerParameter: Attack
   attackTypeParameter: AttackType
@@ -127,6 +172,7 @@ MonoBehaviour:
   dieTriggerParameter: Die
   ariseTriggerParameter: Arise
   isDeadParameter: IsDead
+  maxSpeedForNormalization: 6
   debugLog: 0
 --- !u!54 &3001573265336359181
 Rigidbody:
@@ -178,3 +224,121 @@ CapsuleCollider:
   m_Height: 1
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &439192832152557041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 226482859916651790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bf0f2ebe9294a4ab8909bafed929a595, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LionQuest.Runtime::CombatController
+  knockbackMultiplier: 2
+  damageMultiplier: 1
+  targetTag: Enemy
+  attackPoint: {fileID: 2320182844793796651}
+  attackPointDistance: 0.8
+  attackPointHeight: 1
+  debugCombat: 0
+--- !u!114 &1111574233650148706
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 226482859916651790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2989ae0c60014e16acf49bdf6abcfc2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LionQuest.Runtime::CharacterStats
+  characterID: 67
+  definition: {fileID: 0}
+  souls: 0
+--- !u!114 &1040616916856977904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 226482859916651790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e113220ade4fd47019168c71fc79a7ae, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LionQuest.Runtime::TopDownPlayerController
+  moveSpeed: 6
+  sprintMultiplier: 1
+  acceleration: 50
+  stopDrag: 10
+  mapGenerator: {fileID: 0}
+  debugGroundDetection: 0
+  rotationSpeed: 10
+  rotateTowardsMovement: 1
+  groundLevel: 0
+  groundCheckDistance: 0.1
+  groundLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  viewportCamera: {fileID: 0}
+  viewportMargin: 0.1
+  enforceViewportBounds: 1
+  characterAnimator: {fileID: 4257904257366354681}
+  combatController: {fileID: 439192832152557041}
+  basicAttackData: {fileID: 11400000, guid: 0e220d39f44a04b1dac662328b85cb9d, type: 2}
+  basicAttackMinInterval: 0.5
+  skill1AttackData: {fileID: 11400000, guid: 646800096aebe4fc9970d3d7b77400c7, type: 2}
+  skill1BaseCooldown: 10
+  skill2AttackData: {fileID: 0}
+  skill2ProjectileData: {fileID: 0}
+  skill2LaserData: {fileID: 11400000, guid: d558aeebf2b98468f947d358a332ab37, type: 2}
+  laserMuzzle: {fileID: 8717512587654624085}
+  skill3AttackData: {fileID: 0}
+  skill3BattleCryData: {fileID: 11400000, guid: 47d5b7c164aa14094a849894e75cda40, type: 2}
+  maxHealth: 70
+  currentHealth: 0
+  characterStats: {fileID: 0}
+--- !u!114 &7770970617440188966
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 226482859916651790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62899f850307741f2a39c98a8b639597, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.PlayerInput
+  m_Actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_NotificationBehavior: 2
+  m_UIInputModule: {fileID: 0}
+  m_DeviceLostEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_DeviceRegainedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ControlsChangedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ActionEvents: []
+  m_NeverAutoSwitchControlSchemes: 0
+  m_DefaultControlScheme: 
+  m_DefaultActionMap: Player
+  m_SplitScreenIndex: -1
+  m_Camera: {fileID: 0}
+--- !u!4 &607828009113335732 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+  m_PrefabInstance: {fileID: 1145542853486104671}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &8717512587654624085 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -639763325267172598, guid: f9a1aba1f22d14ebfb3caba8dbdff32b, type: 3}
+  m_PrefabInstance: {fileID: 1145542853486104671}
+  m_PrefabAsset: {fileID: 0}

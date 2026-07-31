@@ -57,6 +57,9 @@ public static class AgentBatch
                 case "AssCapSkills":
                     InvokeGeneratorMenu("LionQuest/Generate/AssCap Skills");
                     break;
+                case "Character67":
+                    InvokeGeneratorMenu("LionQuest/Generate/Character 67");
+                    break;
                 case "PlayerHud":
                     InvokeGeneratorMenu("LionQuest/Generate/Player HUD");
                     break;
@@ -66,8 +69,23 @@ public static class AgentBatch
                 case "SkillIcons":
                     InvokeGeneratorMenu("LionQuest/Generate/Skill Icons");
                     break;
+                case "Level1":
+                    InvokeGeneratorMenu("LionQuest/Generate/Level 1");
+                    break;
+                case "EnemyCombat":
+                    InvokeGeneratorMenu("LionQuest/Generate/Enemy Combat");
+                    break;
                 case "GenerateMap":
                     RunMapGenerator();
+                    break;
+                case "CameraRigFraming":
+                    ApplyCameraRigFraming();
+                    break;
+                case "AgentGym":
+                    InvokeGeneratorMenu("LionQuest/Generate/Agent Gym");
+                    break;
+                case "AgentGymCoop":
+                    InvokeGeneratorMenu("LionQuest/Generate/Agent Gym Coop");
                     break;
                 case "CaptureSelection":
                     CaptureCharacterSelection();
@@ -168,6 +186,46 @@ public static class AgentBatch
         Report(OK, "diagnose mapgen done");
     }
 
+    /// <summary>
+    /// Dumps every scene's TopDownCameraController yaw/tilt. Movement in TopDownPlayerController is
+    /// world-axis (new Vector3(input.x, 0, input.y)) with no camera-relative transform, so any
+    /// non-zero rotationAngle shears input against what's on screen. SampleScene is binary, so its
+    /// values are only readable this way — this is the reference the other scenes must match.
+    /// Usage: -executeMethod AgentBatch.DiagnoseCameraRig
+    /// </summary>
+    public static void DiagnoseCameraRig()
+    {
+        foreach (string guid in AssetDatabase.FindAssets("t:Scene"))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (!path.StartsWith("Assets/Scenes/")) continue;
+
+            var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+                path, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                foreach (var cam in root.GetComponentsInChildren<Camera>(true))
+                {
+                    var rig = cam.GetComponent<TopDownCameraController>();
+                    string kind = rig != null ? "TopDownCameraController" : "plain Camera";
+                    string angles = "n/a";
+                    if (rig != null)
+                    {
+                        var so = new SerializedObject(rig);
+                        angles = $"tilt={PropVal(so.FindProperty("tiltAngle"))} " +
+                                 $"yaw={PropVal(so.FindProperty("rotationAngle"))} " +
+                                 $"dist={PropVal(so.FindProperty("distance"))} " +
+                                 $"height={PropVal(so.FindProperty("height"))}";
+                    }
+                    Debug.Log($"DIAG|scene={path} cam={cam.name} rig={kind} {angles} " +
+                              $"euler={cam.transform.rotation.eulerAngles} tag={cam.tag}");
+                }
+            }
+        }
+        Report(OK, "diagnose camera rig done");
+    }
+
     static string PropVal(SerializedProperty p)
     {
         switch (p.propertyType)
@@ -251,6 +309,83 @@ public static class AgentBatch
         Report(OK, "diagnose asscap skills done");
     }
 
+    /// <summary>
+    /// Dumps every CharacterDefinition the roster discovers plus, for each, the components a
+    /// player prefab must carry to be playable. A character can look correct in the carousel and
+    /// still be unplayable (no PlayerInput -> no input; no CharacterStats -> no saves/skill
+    /// gating), and neither shows up as a compile error — hence the per-component print.
+    /// </summary>
+    public static void DiagnoseRoster()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:CharacterDefinition");
+        Debug.Log($"DIAG|definitionCount={guids.Length}");
+
+        bool allPlayable = true;
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            var def = AssetDatabase.LoadAssetAtPath<CharacterDefinition>(path);
+            if (def == null) continue;
+
+            int treeCount = def.skillTrees != null ? def.skillTrees.Length : 0;
+            Debug.Log($"DIAG|definition={def.characterID} display='{def.displayName}' " +
+                      $"unlockedByDefault={def.unlockedByDefault} trees={treeCount} path={path}");
+
+            GameObject prefab = def.playerPrefab;
+            if (prefab == null)
+            {
+                Debug.Log($"DIAG|{def.characterID}.playerPrefab=MISSING");
+                allPlayable = false;
+                continue;
+            }
+
+            bool hasController = prefab.GetComponentInChildren<TopDownPlayerController>(true) != null;
+            bool hasCombat = prefab.GetComponentInChildren<CombatController>(true) != null;
+            bool hasStats = prefab.GetComponentInChildren<CharacterStats>(true) != null;
+            bool hasAnimator = prefab.GetComponentInChildren<CharacterAnimator>(true) != null;
+            bool hasInput = prefab.GetComponentInChildren<UnityEngine.InputSystem.PlayerInput>(true) != null;
+            bool hasBody = prefab.GetComponentInChildren<Rigidbody>(true) != null
+                           && prefab.GetComponentInChildren<CapsuleCollider>(true) != null;
+
+            Debug.Log($"DIAG|{def.characterID}.prefab={prefab.name} controller={hasController} " +
+                      $"combat={hasCombat} stats={hasStats} animator={hasAnimator} " +
+                      $"playerInput={hasInput} rigidbody+capsule={hasBody} active={prefab.activeSelf} " +
+                      $"tag={prefab.tag}");
+
+            if (treeCount == 0) Debug.Log($"DIAG|{def.characterID}.trees=NONE (no upgrades purchasable, all skills stay locked)");
+
+            // Skill slots 1..3 must each resolve to a tree, or TopDownPlayerController treats the
+            // slot as permanently unlocked and the HUD lock mark disagrees with the buttons.
+            if (def.skillTrees != null)
+            {
+                for (int slot = 1; slot <= 3; slot++)
+                {
+                    bool bound = false;
+                    foreach (SkillTreeDefinition tree in def.skillTrees)
+                    {
+                        if (tree.skillSlot == slot) { bound = true; break; }
+                    }
+                    if (!bound) Debug.Log($"DIAG|{def.characterID}.slot{slot}=UNBOUND");
+                }
+            }
+
+            if (!hasController || !hasCombat || !hasStats || !hasAnimator || !hasInput || !hasBody
+                || treeCount == 0)
+            {
+                allPlayable = false;
+            }
+        }
+
+        if (!allPlayable)
+        {
+            Report(FAIL, "one or more CharacterDefinitions are not playable (see DIAG lines above)");
+            EditorApplication.Exit(1);
+            return;
+        }
+
+        Report(OK, "diagnose roster done");
+    }
+
     static string GetSphereRadius(GameObject effectPrefab)
     {
         if (effectPrefab == null) return "no-effect-prefab";
@@ -296,6 +431,111 @@ public static class AgentBatch
         }
 
         Report(OK, "diagnose player hud done");
+    }
+
+    /// <summary>
+    /// Lists every TopDownPlayerController baked into the gameplay scene together with the
+    /// CharacterStats identity/definition it carries. A scene-baked player next to
+    /// PlayerSpawner's runtime clone means two players read input at once: one of them can be
+    /// missing its CharacterDefinition, in which case SkillIdForSlot returns null and
+    /// HandleSkills' unlock gate is skipped entirely — skills fire while the HUD (bound to the
+    /// other player) shows every slot locked.
+    /// Usage: -executeMethod AgentBatch.DiagnoseScenePlayers
+    /// </summary>
+    public static void DiagnoseScenePlayers()
+    {
+        string scenePath = Environment.GetEnvironmentVariable("AGENT_GEN");
+        if (string.IsNullOrEmpty(scenePath)) scenePath = "Assets/Scenes/SampleScene.unity";
+
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        int playerCount = 0;
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            foreach (var controller in root.GetComponentsInChildren<TopDownPlayerController>(true))
+            {
+                playerCount++;
+                var stats = controller.GetComponent<CharacterStats>();
+                string characterId = stats != null ? stats.characterID : "NO-CharacterStats";
+                CharacterDefinition def = stats != null ? stats.definition : null;
+                Debug.Log($"DIAG|scenePlayer[{playerCount - 1}] name={controller.gameObject.name} " +
+                          $"path={PathOf(controller.transform)} active={controller.gameObject.activeInHierarchy} " +
+                          $"characterID={characterId} definition={(def != null ? def.name : "NULL")}");
+
+                if (def == null) continue;
+                int treeCount = def.skillTrees != null ? def.skillTrees.Length : 0;
+                Debug.Log($"DIAG|scenePlayer[{playerCount - 1}].skillTrees={treeCount}");
+                if (def.skillTrees == null) continue;
+                foreach (var tree in def.skillTrees)
+                {
+                    Debug.Log($"DIAG|scenePlayer[{playerCount - 1}].tree id={tree.skillId} slot={tree.skillSlot}");
+                }
+            }
+        }
+
+        Debug.Log($"DIAG|scene={scenePath} playerCount={playerCount}");
+        Debug.Log($"DIAG|persistentDataPath={Application.persistentDataPath}");
+        string savePath = System.IO.Path.Combine(Application.persistentDataPath, "gamesave.json");
+        Debug.Log($"DIAG|saveExists={System.IO.File.Exists(savePath)} savePath={savePath}");
+        if (System.IO.File.Exists(savePath))
+        {
+            Debug.Log($"DIAG|saveContents={System.IO.File.ReadAllText(savePath).Replace("\n", " ")}");
+        }
+
+        Report(OK, "diagnose scene players done");
+    }
+
+    /// <summary>
+    /// Removes scene-baked player objects from SampleScene, leaving PlayerSpawner as the only
+    /// thing that creates players. A baked player has no CharacterDefinition (only PlayerSpawner
+    /// assigns one), so its skill slots resolve no skill tree and fire regardless of the unlock
+    /// gate, while the HUD stays bound to the spawner's clone and shows those slots locked.
+    ///
+    /// Deliberately NOT called by any generator: SampleScene is binary-serialized, so this edit
+    /// produces no reviewable diff. Run it on purpose:
+    ///   sh tools/unity-batch.sh StripBakedPlayersFromSampleScene
+    /// AgentGym.unity needs no such cleanup — it is generated with zero baked players.
+    /// </summary>
+    public static void StripBakedPlayersFromSampleScene()
+    {
+        const string scenePath = "Assets/Scenes/SampleScene.unity";
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+            scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+        var doomed = new System.Collections.Generic.List<GameObject>();
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            foreach (var controller in root.GetComponentsInChildren<TopDownPlayerController>(true))
+            {
+                doomed.Add(controller.gameObject);
+                Debug.Log($"DIAG|removing bakedPlayer={PathOf(controller.transform)}");
+            }
+        }
+
+        foreach (GameObject go in doomed)
+        {
+            UnityEngine.Object.DestroyImmediate(go);
+        }
+
+        if (doomed.Count > 0)
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+            UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
+        }
+
+        Report(OK, $"stripped {doomed.Count} baked player(s) from SampleScene");
+    }
+
+    static string PathOf(Transform t)
+    {
+        string path = t.name;
+        while (t.parent != null)
+        {
+            t = t.parent;
+            path = t.name + "/" + path;
+        }
+        return path;
     }
 
     /// <summary>
@@ -495,10 +735,10 @@ public static class AgentBatch
     }
 
     /// <summary>
-    /// Opens the panel against a real CharacterDefinition and asserts every spawned node's
-    /// computed on-screen rect falls inside the node container's bounds — a machine check for
-    /// the exact blank-viewport regression seen in review (anchor mismatch put every node
-    /// ~1100px right / ~700px below the masked viewport with no visible error).
+    /// Opens the panel against a real CharacterDefinition and asserts the upgrade rows for the
+    /// first category actually spawned and each carries visible text — a machine check that the
+    /// list is populated, replacing the old graph-era out-of-bounds node check (rows are now
+    /// positioned by a VerticalLayoutGroup, so they cannot land outside the viewport at all).
     /// </summary>
     static bool DiagnoseSkillTreeLayout(SkillTreeScreenController panel, CharacterDefinition def)
     {
@@ -506,37 +746,48 @@ public static class AgentBatch
         panel.Open(def, null);
 
         var so = new SerializedObject(panel);
-        var containerProp = so.FindProperty("nodeContainer").objectReferenceValue as RectTransform;
-        if (containerProp == null)
+        var rowContainer = so.FindProperty("rowContainer").objectReferenceValue as RectTransform;
+        var categoryContainer = so.FindProperty("categoryContainer").objectReferenceValue as RectTransform;
+        if (rowContainer == null || categoryContainer == null)
         {
-            Debug.Log("DIAG|nodeContainer=MISSING");
+            Debug.Log($"DIAG|rowContainer={(rowContainer != null ? "ok" : "MISSING")} categoryContainer={(categoryContainer != null ? "ok" : "MISSING")}");
             return false;
         }
 
-        Rect bounds = containerProp.rect;
-        Debug.Log($"DIAG|nodeContainerBounds={bounds}");
-
-        int nodeCount = 0;
-        int outOfBounds = 0;
-        foreach (RectTransform child in containerProp)
+        int tabCount = 0;
+        foreach (RectTransform child in categoryContainer)
         {
-            var nodeUi = child.GetComponent<SkillTreeNodeUI>();
-            if (nodeUi == null) continue;
-            nodeCount++;
+            if (child.GetComponent<SkillTreeLinkUI>() != null) tabCount++;
+        }
 
-            Vector2 pos = child.anchoredPosition;
-            bool inBounds = pos.x >= bounds.xMin && pos.x <= bounds.xMax && pos.y >= bounds.yMin && pos.y <= bounds.yMax;
-            if (!inBounds)
+        int rowCount = 0;
+        int blankRows = 0;
+        foreach (RectTransform child in rowContainer)
+        {
+            var rowUi = child.GetComponent<SkillTreeNodeUI>();
+            if (rowUi == null) continue;
+            rowCount++;
+
+            bool hasText = false;
+            foreach (var text in child.GetComponentsInChildren<TMPro.TMP_Text>(true))
             {
-                outOfBounds++;
-                Debug.Log($"DIAG|nodeOutOfBounds id={nodeUi.NodeId} pos={pos}");
+                if (text.gameObject.activeInHierarchy && !string.IsNullOrWhiteSpace(text.text)) { hasText = true; break; }
+            }
+            if (!hasText)
+            {
+                blankRows++;
+                Debug.Log($"DIAG|rowHasNoVisibleText id={rowUi.NodeId}");
             }
         }
 
-        Debug.Log($"DIAG|skillTreeNodeCount={nodeCount} outOfBounds={outOfBounds}");
+        int expectedTabs = def.skillTrees != null ? def.skillTrees.Length : 0;
+        int expectedRows = def.skillTrees != null && def.skillTrees.Length > 0 && def.skillTrees[0].nodes != null
+            ? def.skillTrees[0].nodes.Length
+            : 0;
+        Debug.Log($"DIAG|upgradeTabs={tabCount}/{expectedTabs} upgradeRows={rowCount}/{expectedRows} blankRows={blankRows}");
 
         panel.Close();
-        return outOfBounds == 0 && nodeCount > 0;
+        return tabCount == expectedTabs && rowCount == expectedRows && rowCount > 0 && blankRows == 0;
     }
 
     /// <summary>
@@ -636,7 +887,9 @@ public static class AgentBatch
         tex.Apply();
         RenderTexture.active = previousActive;
 
-        string dir = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Logs");
+        // Same destination as HarnessFixture.Shot() — <project>/screenshots/, not Logs/ or
+        // Temp/ (Unity deletes Temp/ on editor quit, taking the proof with it).
+        string dir = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "screenshots");
         System.IO.Directory.CreateDirectory(dir);
         string path = System.IO.Path.Combine(dir, fileName);
         System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
@@ -665,6 +918,66 @@ public static class AgentBatch
 
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
         UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
+    }
+
+    /// <summary>
+    /// Force distance/height/tilt/yaw on every TopDownCameraController in every scene.
+    ///
+    /// Level1 and AgentGym are code-generated, so their rigs come from their generators. SampleScene
+    /// has no generator and is binary-serialized, so its values are unreachable by text edit and this
+    /// is the only way to change them. Written as a sweep rather than a SampleScene special case so a
+    /// scene added later cannot quietly keep its own framing.
+    /// </summary>
+    static void ApplyCameraRigFraming()
+    {
+        const float distance = 11f;
+        const float height = 0f;
+        const float tilt = 55f;
+        // Yaw stays 0: movement input is mapped onto world axes with no camera-relative transform,
+        // so a non-zero yaw makes "left" travel diagonally on screen.
+        const float yaw = 0f;
+
+        int changed = 0;
+        foreach (string guid in AssetDatabase.FindAssets("t:Scene"))
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (!path.StartsWith("Assets/Scenes/")) continue;
+
+            var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(
+                path, UnityEditor.SceneManagement.OpenSceneMode.Single);
+
+            bool dirty = false;
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                foreach (var rig in root.GetComponentsInChildren<TopDownCameraController>(true))
+                {
+                    var so = new SerializedObject(rig);
+                    so.FindProperty("distance").floatValue = distance;
+                    so.FindProperty("height").floatValue = height;
+                    so.FindProperty("tiltAngle").floatValue = tilt;
+                    so.FindProperty("rotationAngle").floatValue = yaw;
+                    so.ApplyModifiedProperties();
+
+                    // Pre-place at the position LateUpdate solves for a target at the origin, so the
+                    // first frame is already settled instead of visibly swinging into place.
+                    float tiltRad = tilt * Mathf.Deg2Rad;
+                    rig.transform.SetPositionAndRotation(
+                        new Vector3(0f, height + distance * Mathf.Sin(tiltRad), -distance * Mathf.Cos(tiltRad)),
+                        Quaternion.Euler(tilt, yaw, 0f));
+
+                    changed++;
+                    dirty = true;
+                    Debug.Log($"DIAG|framed scene={path} cam={rig.gameObject.name}");
+                }
+            }
+
+            if (!dirty) continue;
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+            UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
+        }
+
+        if (changed == 0)
+            throw new Exception("No TopDownCameraController found in any scene — nothing was framed.");
     }
 
     static void InvokeGeneratorMenu(string menuPath)

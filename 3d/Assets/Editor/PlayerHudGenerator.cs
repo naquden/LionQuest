@@ -120,7 +120,12 @@ public static class PlayerHudGenerator
         Image[] skillCooldownOverlays = new Image[SkillSlotCount];
         TMP_Text[] skillSlotLabels = new TMP_Text[SkillSlotCount];
         Image[] skillSlotBackgrounds = new Image[SkillSlotCount];
-        BuildSkillSlots(content.transform, corner, skillIconImages, skillCooldownOverlays, skillSlotLabels, skillSlotBackgrounds);
+        TMP_Text[] skillCooldownTexts = new TMP_Text[SkillSlotCount];
+        TMP_Text[] skillLockedMarks = new TMP_Text[SkillSlotCount];
+        Image[] skillCooldownDiscs = new Image[SkillSlotCount];
+        Image[] skillSlotOutlines = new Image[SkillSlotCount];
+        BuildSkillSlots(content.transform, corner, skillIconImages, skillCooldownOverlays, skillSlotLabels,
+            skillSlotBackgrounds, skillCooldownTexts, skillLockedMarks, skillSlotOutlines, skillCooldownDiscs);
 
         var panel = panelRoot.AddComponent<PlayerHUDPanel>();
         var so = new SerializedObject(panel);
@@ -136,6 +141,10 @@ public static class PlayerHudGenerator
         AssignArray(so, "skillCooldownOverlays", skillCooldownOverlays);
         AssignArray(so, "skillSlotLabels", skillSlotLabels);
         AssignArray(so, "skillSlotBackgrounds", skillSlotBackgrounds);
+        AssignArray(so, "skillCooldownTexts", skillCooldownTexts);
+        AssignArray(so, "skillLockedMarks", skillLockedMarks);
+        AssignArray(so, "skillSlotOutlines", skillSlotOutlines);
+        AssignArray(so, "skillCooldownDiscs", skillCooldownDiscs);
 
         so.ApplyModifiedProperties();
 
@@ -273,7 +282,8 @@ public static class PlayerHudGenerator
         return text;
     }
 
-    static void BuildSkillSlots(Transform parent, Vector2 corner, Image[] icons, Image[] overlays, TMP_Text[] labels, Image[] backgrounds)
+    static void BuildSkillSlots(Transform parent, Vector2 corner, Image[] icons, Image[] overlays, TMP_Text[] labels,
+        Image[] backgrounds, TMP_Text[] cooldownTexts, TMP_Text[] lockedMarks, Image[] outlines, Image[] cooldownDiscs)
     {
         const float slotSize = 56f;
         const float spacing = 8f;
@@ -312,9 +322,25 @@ public static class PlayerHudGenerator
             SetNoRaycast(background);
             backgrounds[i] = background;
 
+            // Gold ring so the empty box is still legible against the panel — without it a slot
+            // with no icon yet is nearly invisible against the surface color.
+            var outlineGo = new GameObject("SlotOutline", typeof(RectTransform), typeof(Image));
+            outlineGo.transform.SetParent(slotGo.transform, false);
+            StretchFull((RectTransform)outlineGo.transform);
+            Image outline = outlineGo.GetComponent<Image>();
+            outline.sprite = UiTheme.RoundedOutlineSprite;
+            outline.type = Image.Type.Sliced;
+            outline.color = UiTheme.Gold;
+            SetNoRaycast(outline);
+            outlines[i] = outline;
+
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(slotGo.transform, false);
-            StretchFull((RectTransform)iconGo.transform);
+            var iconRect = (RectTransform)iconGo.transform;
+            StretchFull(iconRect);
+            // Inset so the icon glyph doesn't cover the outline ring.
+            iconRect.offsetMin = new Vector2(8f, 8f);
+            iconRect.offsetMax = new Vector2(-8f, -8f);
             Image icon = iconGo.GetComponent<Image>();
             icon.enabled = false;
             SetNoRaycast(icon);
@@ -334,24 +360,82 @@ public static class PlayerHudGenerator
             overlay.fillOrigin = (int)Image.Origin360.Top;
             overlay.fillClockwise = true;
             overlay.fillAmount = 0f;
-            overlay.color = new Color(0.82f, 0.82f, 0.85f, 0.5f);
+            // Dark scrim, not a light wash — the sweep must read as "unavailable".
+            overlay.color = new Color(0.02f, 0.02f, 0.04f, 0.72f);
             SetNoRaycast(overlay);
             overlays[i] = overlay;
 
+            // Dark disc behind the seconds number. Without it the light bold digits sit directly on
+            // whatever the skill icon draws and disappear wherever the icon is pale — the radial
+            // scrim only covers the part of the box the sweep has reached, so it can't be relied on.
+            var cooldownDiscGo = new GameObject("CooldownTextBacking", typeof(RectTransform), typeof(Image));
+            cooldownDiscGo.transform.SetParent(slotGo.transform, false);
+            var discRect = (RectTransform)cooldownDiscGo.transform;
+            discRect.anchorMin = discRect.anchorMax = discRect.pivot = new Vector2(0.5f, 0.5f);
+            discRect.sizeDelta = new Vector2(32f, 32f);
+            discRect.anchoredPosition = Vector2.zero;
+            Image cooldownDisc = cooldownDiscGo.GetComponent<Image>();
+            cooldownDisc.sprite = UiTheme.CircleSprite;
+            cooldownDisc.color = new Color(0.02f, 0.02f, 0.04f, 0.85f);
+            SetNoRaycast(cooldownDisc);
+            cooldownDiscs[i] = cooldownDisc;
+
+            // Remaining seconds, centered over the scrim. PlayerHUDPanel blanks it when ready.
+            var cooldownTextGo = new GameObject("CooldownText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            cooldownTextGo.transform.SetParent(slotGo.transform, false);
+            StretchFull((RectTransform)cooldownTextGo.transform);
+            var cooldownText = cooldownTextGo.GetComponent<TextMeshProUGUI>();
+            cooldownText.text = string.Empty;
+            cooldownText.fontSize = 22;
+            cooldownText.alignment = TextAlignmentOptions.Center;
+            cooldownText.color = UiTheme.TextLight;
+            cooldownText.fontStyle = FontStyles.Bold;
+            cooldownText.font = UiTheme.DefaultFont();
+            SetNoRaycast(cooldownText);
+            cooldownTexts[i] = cooldownText;
+
+            // Shown only while the skill's Unlock node is unpurchased.
+            var lockedGo = new GameObject("LockedMark", typeof(RectTransform), typeof(TextMeshProUGUI));
+            lockedGo.transform.SetParent(slotGo.transform, false);
+            StretchFull((RectTransform)lockedGo.transform);
+            var lockedMark = lockedGo.GetComponent<TextMeshProUGUI>();
+            // Plain ASCII "X" — the default TMP font has no "✕" glyph, so a nicer mark would
+            // render as nothing at all (assertions on activeInHierarchy would still pass).
+            lockedMark.text = "X";
+            lockedMark.fontSize = 30;
+            lockedMark.alignment = TextAlignmentOptions.Center;
+            lockedMark.color = UiTheme.SelectedOutline;
+            lockedMark.fontStyle = FontStyles.Bold;
+            lockedMark.font = UiTheme.DefaultFont();
+            SetNoRaycast(lockedMark);
+            lockedGo.SetActive(false);
+            lockedMarks[i] = lockedMark;
+
             // Corner keybind badge — always visible (even with an icon set), so slots stay
             // readable once real icons are assigned. Drawn after the overlay so it stays on top.
+            // Text is filled at runtime from the action's real binding (PlayerHUDPanel.BindSkillSlot);
+            // the slot number here is only the edit-time placeholder.
+            var badgeGo = new GameObject("SlotLabelBadge", typeof(RectTransform), typeof(Image));
+            badgeGo.transform.SetParent(slotGo.transform, false);
+            var badgeRect = (RectTransform)badgeGo.transform;
+            badgeRect.anchorMin = badgeRect.anchorMax = new Vector2(1f, 0f);
+            badgeRect.pivot = new Vector2(1f, 0f);
+            badgeRect.sizeDelta = new Vector2(26f, 18f);
+            badgeRect.anchoredPosition = new Vector2(-3f, 3f); // inside the slot box, not overhanging it
+            Image badge = badgeGo.GetComponent<Image>();
+            badge.sprite = UiTheme.PillFillSprite;
+            badge.type = Image.Type.Sliced;
+            badge.color = new Color(0.05f, 0.04f, 0.03f, 0.92f);
+            SetNoRaycast(badge);
+
             var labelGo = new GameObject("SlotLabel", typeof(RectTransform), typeof(TextMeshProUGUI));
-            labelGo.transform.SetParent(slotGo.transform, false);
-            var labelRect = (RectTransform)labelGo.transform;
-            labelRect.anchorMin = labelRect.anchorMax = new Vector2(1f, 0f);
-            labelRect.pivot = new Vector2(1f, 0f);
-            labelRect.sizeDelta = new Vector2(18f, 18f);
-            labelRect.anchoredPosition = new Vector2(-2f, 2f);
+            labelGo.transform.SetParent(badgeGo.transform, false);
+            StretchFull((RectTransform)labelGo.transform);
             var label = labelGo.GetComponent<TextMeshProUGUI>();
             label.text = (i + 1).ToString();
             label.fontSize = 14;
-            label.alignment = TextAlignmentOptions.BottomRight;
-            label.color = UiTheme.TextLight;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = UiTheme.Gold;
             label.fontStyle = FontStyles.Bold;
             label.font = UiTheme.DefaultFont();
             SetNoRaycast(label);

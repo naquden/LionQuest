@@ -27,7 +27,7 @@ public class CharacterSelectionManager : MonoBehaviour
     [SerializeField] private PlayerSlotUI[] slots = new PlayerSlotUI[SlotCount];
     [SerializeField] private CharacterDefinition[] allCharacters = System.Array.Empty<CharacterDefinition>();
     [SerializeField] private GameObject startPrompt;
-    [SerializeField] private string gameplaySceneName = "SampleScene";
+    [SerializeField] private string gameplaySceneName = "Level1";
     [SerializeField] private SkillTreeScreenController skillTreeScreen;
 
     private readonly PlayerSlotState[] states = new PlayerSlotState[SlotCount];
@@ -180,7 +180,9 @@ public class CharacterSelectionManager : MonoBehaviour
     public void UpgradeCancel(int slotIndex)
     {
         if (!IsSlotUpgrading(slotIndex) || skillTreeScreen == null) return;
-        skillTreeScreen.Close();
+        // Not Close(): from inside a category's upgrade list, Cancel steps back to the category list
+        // first. The screen invokes CloseUpgrade itself once it actually closes.
+        skillTreeScreen.CancelPressed();
     }
 
     private void CloseUpgrade(int slotIndex)

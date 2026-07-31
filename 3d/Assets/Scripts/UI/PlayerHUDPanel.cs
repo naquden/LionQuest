@@ -24,6 +24,10 @@ public class PlayerHUDPanel : MonoBehaviour
     [SerializeField] private Image[] skillCooldownOverlays = System.Array.Empty<Image>();
     [SerializeField] private TMP_Text[] skillSlotLabels = System.Array.Empty<TMP_Text>();
     [SerializeField] private Image[] skillSlotBackgrounds = System.Array.Empty<Image>();
+    [SerializeField] private TMP_Text[] skillCooldownTexts = System.Array.Empty<TMP_Text>();
+    [SerializeField] private TMP_Text[] skillLockedMarks = System.Array.Empty<TMP_Text>();
+    [SerializeField] private Image[] skillSlotOutlines = System.Array.Empty<Image>();
+    [SerializeField] private Image[] skillCooldownDiscs = System.Array.Empty<Image>();
 
     private TopDownPlayerController boundPlayer;
     private CharacterStats boundStats;
@@ -106,31 +110,57 @@ public class PlayerHUDPanel : MonoBehaviour
         bool unlocked = boundPlayer == null || boundPlayer.IsSkillSlotUnlocked(slot + 1);
         slotUnlocked[slot] = unlocked;
 
-        // The background Image lives on the slot root by construction (PlayerHudGenerator.BuildSkillSlots) —
-        // hiding it hides the whole slot, and the row's HorizontalLayoutGroup closes the gap.
+        // The slot box stays visible whether or not the skill is unlocked — a locked slot is
+        // dimmed and marked, so the player can see the skill exists and which button owns it.
+        // The background Image lives on the slot root by construction (PlayerHudGenerator.BuildSkillSlots).
         if (slot < skillSlotBackgrounds.Length && skillSlotBackgrounds[slot] != null)
         {
-            skillSlotBackgrounds[slot].gameObject.SetActive(unlocked);
-            skillSlotBackgrounds[slot].color = UiPalette.SurfaceInset;
+            skillSlotBackgrounds[slot].gameObject.SetActive(true);
+            skillSlotBackgrounds[slot].color = unlocked ? UiPalette.SurfaceInset : UiPalette.Locked;
         }
 
-        if (!unlocked) return;
+        if (slot < skillSlotOutlines.Length && skillSlotOutlines[slot] != null)
+        {
+            skillSlotOutlines[slot].color = unlocked ? UiPalette.Gold : UiPalette.GoldDim;
+        }
 
         if (slot < skillIconImages.Length && skillIconImages[slot] != null)
         {
             skillIconImages[slot].sprite = hasIcon ? icon : null;
             skillIconImages[slot].enabled = hasIcon && icon != null;
-            skillIconImages[slot].color = Color.white;
+            skillIconImages[slot].color = unlocked ? Color.white : UiPalette.TextMuted;
         }
 
+        // Button prompt: real binding for the device this player uses ("1"/"2"/"3" or "Y"/"B"/"RB").
         if (slot < skillSlotLabels.Length && skillSlotLabels[slot] != null)
         {
-            skillSlotLabels[slot].color = UiPalette.TextLight;
+            skillSlotLabels[slot].gameObject.SetActive(true);
+            skillSlotLabels[slot].text = boundPlayer != null
+                ? boundPlayer.GetSkillBindingLabel(slot + 1)
+                : (slot + 1).ToString();
+            skillSlotLabels[slot].color = unlocked ? UiPalette.Gold : UiPalette.TextMuted;
+        }
+
+        if (slot < skillLockedMarks.Length && skillLockedMarks[slot] != null)
+        {
+            skillLockedMarks[slot].gameObject.SetActive(!unlocked);
         }
 
         if (slot < skillCooldownOverlays.Length && skillCooldownOverlays[slot] != null)
         {
             skillCooldownOverlays[slot].fillAmount = 0f;
+        }
+
+        if (slot < skillCooldownTexts.Length && skillCooldownTexts[slot] != null)
+        {
+            skillCooldownTexts[slot].text = string.Empty;
+        }
+
+        // The backing disc only exists to make the seconds readable — hide it while there is no
+        // number to back, otherwise every ready slot carries a black dot over its icon.
+        if (slot < skillCooldownDiscs.Length && skillCooldownDiscs[slot] != null)
+        {
+            skillCooldownDiscs[slot].enabled = false;
         }
     }
 
@@ -147,14 +177,39 @@ public class PlayerHUDPanel : MonoBehaviour
         if (boundPlayer == null || !boundPlayer.IsAlive) return;
 
         float normalized = boundPlayer.SkillCooldownNormalized;
+        float remaining = boundPlayer.SkillCooldownRemaining;
 
         for (int i = 0; i < SkillSlotCount; i++)
         {
+            // The player's control scheme can resolve after Bind (PlayerInput only reports its
+            // paired device once it sends input), so keep the prompt in sync with the binding.
+            if (i < skillSlotLabels.Length && skillSlotLabels[i] != null)
+            {
+                string prompt = boundPlayer.GetSkillBindingLabel(i + 1);
+                if (skillSlotLabels[i].text != prompt) skillSlotLabels[i].text = prompt;
+            }
+
             if (!slotUnlocked[i]) continue;
 
             if (i < skillCooldownOverlays.Length && skillCooldownOverlays[i] != null)
             {
                 skillCooldownOverlays[i].fillAmount = normalized;
+            }
+
+            bool counting = remaining > 0.05f;
+
+            if (i < skillCooldownTexts.Length && skillCooldownTexts[i] != null)
+            {
+                // Whole seconds while locked, blank once ready — a number is readable at
+                // 56px where the radial sweep alone is easy to miss.
+                skillCooldownTexts[i].text = counting
+                    ? Mathf.CeilToInt(remaining).ToString()
+                    : string.Empty;
+            }
+
+            if (i < skillCooldownDiscs.Length && skillCooldownDiscs[i] != null)
+            {
+                skillCooldownDiscs[i].enabled = counting;
             }
         }
     }
@@ -180,7 +235,13 @@ public class PlayerHUDPanel : MonoBehaviour
     private void HandleDeath()
     {
         if (healthFillImage != null) healthFillImage.fillAmount = 0f;
-        if (healthText != null) healthText.text = "0 / 0";
+        // Show 0 out of the real max, not "0 / 0" — the latter reads as a broken/unset max health
+        // bar rather than as a dead player, which is exactly how it was reported as a bug.
+        if (healthText != null)
+        {
+            int max = boundPlayer != null ? Mathf.CeilToInt(boundPlayer.MaxHealth) : 0;
+            healthText.text = $"0 / {max}";
+        }
         if (portraitImage != null) portraitImage.color = new Color(0.4f, 0.4f, 0.4f, 1f);
     }
 

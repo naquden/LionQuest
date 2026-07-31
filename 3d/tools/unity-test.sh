@@ -8,13 +8,16 @@
 # Exit 0 = all tests passed (AGENT_TEST_OK + zero failures in results XML)
 # Exit 1 = any test failed, or the run never produced a results file
 #
-# Screenshots dropped by HarnessFixture.Shot() land in Logs/test-*.png — read
+# Screenshots dropped by HarnessFixture.Shot() land in screenshots/test-*.png — read
 # them back with the Read tool to verify visuals, not just assertions.
+# Never Temp/: Unity deletes that directory when the editor quits, and ./temp is the
+# same directory on a case-insensitive filesystem.
 
 UNITY="/Applications/Unity/Hub/Editor/6000.3.2f1/Unity.app/Contents/MacOS/Unity"
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="$PROJ/Logs/agent-test.log"
 RESULTS="$PROJ/Logs/test-results.xml"
+SHOTS="$PROJ/screenshots"
 FILTER="${1:-}"
 
 # Detect editor lockfile — but only treat it as "editor open" if a process
@@ -27,6 +30,7 @@ if [ -f "$LOCKFILE" ] && lsof "$LOCKFILE" >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname "$LOG")"
+mkdir -p "$SHOTS"
 : > "$LOG"
 rm -f "$RESULTS"
 
@@ -62,6 +66,7 @@ FAILED="$(echo "$SUMMARY" | sed -n 's/.*failed="\([0-9]*\)".*/\1/p')"
 
 echo "Results: total=$TOTAL passed=$PASSED failed=$FAILED"
 echo "XML: $RESULTS"
+echo "Screenshots: $SHOTS"
 grep -oE 'CAPTURE\|[^"[:space:]]+\.png' "$LOG" | sort -u
 
 if [ "$FAILED" != "0" ] || [ -z "$TOTAL" ]; then

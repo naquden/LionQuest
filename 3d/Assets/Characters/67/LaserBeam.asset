@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a96a9a87ac37e432a8962c1ff5cc0b6e, type: 3}
+  m_Name: LaserBeam
+  m_EditorClassIdentifier: LionQuest.Runtime::LaserBeamSkillData
+  skillName: Laser Beam
+  icon: {fileID: 21300000, guid: 5dcac8dda9a124ee4800fba8b8b78483, type: 3}
+  beamPrefab: {fileID: 789475438648976095, guid: c2bd13c2333c842969c14428fba7adc1, type: 3}
+  range: 20
+  beamWidth: 0.12
+  visualDuration: 0.25
+  damage: 45
+  knockbackForce: 2
+  pierceCount: 1
+  fireDelay: 0.35
+  cooldown: 3
+  muzzleFallbackOffset: {x: 0.25, y: 1.2, z: 0.35}

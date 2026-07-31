@@ -31,6 +31,10 @@ public static class CharacterSelectionGenerator
     const string AssCapPrefabPath = CharactersDir + "/AssassinoCapuchino/AssasinoCappuchino.prefab";
     const string AssCapDefinitionPath = CharactersDir + "/AssassinoCapuchino/AssCap_Definition.asset";
 
+    /// <summary>Pinned to roster index 0 — the character every slot starts on, and the fallback
+    /// PlayerSpawner uses when a scene is entered directly with no selection data.</summary>
+    public const string DefaultCharacterID = "AssCap";
+
     const string GameControllerPrefabPath = "Assets/Prefabs/GameController.prefab";
     const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
 
@@ -83,6 +87,11 @@ public static class CharacterSelectionGenerator
         def.displayName = "Assassino Capuchino";
         def.unlockedByDefault = true;
         def.playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(AssCapPrefabPath);
+        // Authored explicitly rather than relying on the C# field initializer: a missing YAML key
+        // deserializes to 0, not the initializer, so an un-regenerated asset would silently give
+        // AssCap 0 base health/speed once CharacterStats starts reading from the definition.
+        def.baseMaxHealth = 100f;
+        def.baseMoveSpeed = 3f;
 
         EditorUtility.SetDirty(def);
         return def;
@@ -96,7 +105,25 @@ public static class CharacterSelectionGenerator
             var def = AssetDatabase.LoadAssetAtPath<CharacterDefinition>(AssetDatabase.GUIDToAssetPath(guid));
             if (def != null) list.Add(def);
         }
+        SortRoster(list);
         return list.ToArray();
+    }
+
+    /// <summary>
+    /// Roster order is player-visible (carousel position, and index 0 is every slot's default
+    /// selection), so it must not depend on AssetDatabase.FindAssets' arbitrary GUID order —
+    /// adding a character would otherwise silently reshuffle which one every player starts on.
+    /// The default character is pinned first; the rest sort by characterID.
+    /// </summary>
+    public static void SortRoster(List<CharacterDefinition> list)
+    {
+        list.Sort((a, b) =>
+        {
+            bool aDefault = a.characterID == DefaultCharacterID;
+            bool bDefault = b.characterID == DefaultCharacterID;
+            if (aDefault != bDefault) return aDefault ? -1 : 1;
+            return string.CompareOrdinal(a.characterID, b.characterID);
+        });
     }
 
     // ------------------------------------------------------------------
@@ -540,7 +567,10 @@ public static class CharacterSelectionGenerator
             rosterProp.GetArrayElementAtIndex(i).objectReferenceValue = roster[i];
         }
         managerSo.FindProperty("startPrompt").objectReferenceValue = startPrompt;
-        managerSo.FindProperty("gameplaySceneName").stringValue = "SampleScene";
+        // Level1, not SampleScene: SampleScene is binary-serialized (unreadable/undiffable by
+        // agents) and carries hand-made Inspector state. Level1 is code-generated text YAML —
+        // see Level1Generator.
+        managerSo.FindProperty("gameplaySceneName").stringValue = "Level1";
         managerSo.ApplyModifiedProperties();
 
         // Regeneration hazard: this method starts from NewScene(EmptyScene), which would drop

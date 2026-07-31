@@ -41,44 +41,76 @@ public class SkillTreeUpgradeTests : HarnessFixture
         Assert.IsTrue(manager.IsSlotUpgrading(0), "Upgrade press did not open the skill tree panel.");
         Shot("skilltree-opened");
 
-        // SelectDefaultNode() lands on the tree's Keystone (tier 0) node, which for
-        // "attributes" is the free root unlock (cost 0) — buying it spends nothing but should
-        // still advance its rank. A real souls spend is exercised separately below.
-        int rankBefore = SkillTreeService.GetRank(SaveManager.LoadCharacter(character.characterID), "attributes", "root");
-        yield return Press(pad, GamepadButton.South); // UpgradeSubmit -> buys the selected (root) node
+        // Panel opens with the cursor in the CATEGORY list, so the first Submit only drills into
+        // "Body" — it must not buy anything.
+        CharacterSaveData onOpen = SaveManager.LoadCharacter(character.characterID);
+        yield return Press(pad, GamepadButton.South); // UpgradeSubmit -> focus the Body rows
         yield return null;
 
-        int rankAfter = SkillTreeService.GetRank(SaveManager.LoadCharacter(character.characterID), "attributes", "root");
-        Assert.Greater(rankAfter, rankBefore, "Buying the root node did not advance its rank.");
-        Shot("skilltree-after-buy-root");
+        Assert.AreEqual(onOpen.souls, SaveManager.LoadCharacter(character.characterID).souls,
+            "Submit on the category list spent souls — it should only move focus into the rows.");
+        Shot("skilltree-rows-focused");
 
-        // Navigate up-left to strength_1 (gridPos -2,1 vs root's 0,0; costs 10 souls) and buy it —
-        // this is the purchase that must actually spend souls. A single-frame stick pulse (not
-        // Stick(), which holds the direction across the whole repeat delay and would double-fire
-        // UpdateUpgradePanelInput's repeat-delay navigation) moves the cursor exactly once.
-        int soulsBefore = SaveManager.LoadCharacter(character.characterID).souls;
-        Vector2 dir = new Vector2(-1f, 1f).normalized;
-        InputSystem.QueueStateEvent(pad, new GamepadState { leftStick = dir });
-        InputSystem.Update();
-        yield return null;
-        InputSystem.QueueStateEvent(pad, new GamepadState { leftStick = Vector2.zero });
-        InputSystem.Update();
+        // Cursor now sits on the first Body row, a real priced upgrade, so this Submit must both
+        // advance its rank AND spend souls.
+        CharacterSaveData before = SaveManager.LoadCharacter(character.characterID);
+        int rankBefore = SkillTreeService.GetRank(before, "attributes", "strength_1");
+        int soulsBefore = before.souls;
+
+        yield return Press(pad, GamepadButton.South); // UpgradeSubmit -> buys the highlighted row
         yield return null;
 
+        CharacterSaveData after = SaveManager.LoadCharacter(character.characterID);
+        Assert.Greater(SkillTreeService.GetRank(after, "attributes", "strength_1"), rankBefore,
+            "Buying the first Body row did not advance its rank.");
+        Assert.Less(after.souls, soulsBefore, "Buying the first Body row did not spend any souls.");
+        Shot("skilltree-after-buy-body-row");
+
+        // Down moves to the next row inside the focused pane. A single-frame stick pulse (not a held
+        // direction, which would double-fire the repeat-delay navigation) moves the cursor once.
+        yield return PulseStick(pad, Vector2.down);
         yield return Press(pad, GamepadButton.South);
         yield return null;
 
-        int soulsAfter = SaveManager.LoadCharacter(character.characterID).souls;
-        Assert.Less(soulsAfter, soulsBefore, "Buying strength_1 did not spend any souls.");
-        Shot("skilltree-after-buy-paid");
+        Assert.Greater(SkillTreeService.GetRank(SaveManager.LoadCharacter(character.characterID), "attributes", "health_1"), 0,
+            "Down + Submit did not buy the second Body row — row navigation is broken.");
+        Shot("skilltree-after-buy-second-row");
 
-        string savedJson = File.ReadAllText(Path.Combine(Application.persistentDataPath, "gamesave.json"));
-        StringAssert.Contains(character.characterID, savedJson, "Purchase was not persisted to gamesave.json.");
+        // Left moves focus back OUT to the category list (it must not change category), then Down
+        // picks Whirlwind and Submit drills into its rows.
+        yield return PulseStick(pad, Vector2.left);
+        Shot("skilltree-categories-refocused");
 
-        yield return Press(pad, GamepadButton.East); // UpgradeCancel -> closes panel
+        yield return PulseStick(pad, Vector2.down);
+        yield return Press(pad, GamepadButton.South); // drill into Whirlwind's rows
         yield return null;
 
-        Assert.IsFalse(manager.IsSlotUpgrading(0), "Cancel did not close the skill tree panel.");
+        // First Whirlwind row is the Unlock gate; buying it must flip IsSkillUnlocked.
+        yield return Press(pad, GamepadButton.South);
+        yield return null;
+
+        CharacterSaveData afterUnlock = SaveManager.LoadCharacter(character.characterID);
+        Assert.IsTrue(SkillTreeService.IsSkillUnlocked(character, afterUnlock, "whirlwind"),
+            "Buying the Whirlwind Unlock row did not unlock the skill.");
+        Shot("skilltree-after-unlock-whirlwind");
+
+        // SaveManager.GetSavePath(), not persistentDataPath — the harness redirects the save file
+        // into Temp/ so the suite can't wipe the player's real progress.
+        string savedJson = File.ReadAllText(SaveManager.GetSavePath());
+        StringAssert.Contains(character.characterID, savedJson, "Purchase was not persisted to gamesave.json.");
+
+        // Cancel is the inverse of Submit: from the row list it steps back to the categories, and
+        // only a second press closes the screen.
+        yield return Press(pad, GamepadButton.East);
+        yield return null;
+
+        Assert.IsTrue(manager.IsSlotUpgrading(0),
+            "Cancel closed the whole screen from the row list — it should step back to the category list first.");
+
+        yield return Press(pad, GamepadButton.East);
+        yield return null;
+
+        Assert.IsFalse(manager.IsSlotUpgrading(0), "Cancel on the category list did not close the panel.");
         Shot("skilltree-closed");
     }
 

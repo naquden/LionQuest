@@ -74,4 +74,4 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5a8e023ef0b0a4cdfb068c7a494832d5, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CharacterSelectionInputHandler
+  m_EditorClassIdentifier: LionQuest.Runtime::CharacterSelectionInputHandler

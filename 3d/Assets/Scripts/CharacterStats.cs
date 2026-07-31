@@ -137,7 +137,20 @@ public class CharacterStats : MonoBehaviour
 
     public float GetMaxHealth()
     {
-        return 100f + ((healthLevel - 1) * 20f);
+        return BaseMaxHealth + ((healthLevel - 1) * 20f);
+    }
+
+    /// <summary>Base health from the definition. Falls back to the historical 100 when definition is
+    /// null — that is the prefab-asset / scene-authored player case, which PlayerSpawner never
+    /// produces. Deliberately silent: SkillIdForSlot already LogErrors loudly for a null definition.</summary>
+    private float BaseMaxHealth => definition != null ? definition.baseMaxHealth : 100f;
+
+    /// <summary>Base move speed from the definition, before Body upgrades. Callers pass their own
+    /// serialized fallback (the prefab's authored moveSpeed) for the null-definition case, so a
+    /// scene-authored player without a definition keeps whatever speed it was given in the Inspector.</summary>
+    public float GetBaseMoveSpeed(float fallback)
+    {
+        return definition != null ? definition.baseMoveSpeed : fallback;
     }
 
     /// <summary>Passive move-speed multiplier. Lvl 1 = 1.0x, +10% per level.</summary>

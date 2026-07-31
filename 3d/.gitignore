@@ -90,3 +90,8 @@ cloudbuild/
 
 # Unity Package Manager (keep manifest.json, ignore lock file)
 [Pp]ackages/packages-lock.json
+
+# Agent verification screenshots (HarnessFixture.Shot / AgentBatch.CaptureToPng).
+# Deliberately NOT under Temp/ — Unity deletes that on editor quit, and ./temp is the
+# same directory on a case-insensitive filesystem.
+/screenshots/

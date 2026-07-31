@@ -6,9 +6,26 @@ using System.Collections.Generic;
 public static class SaveManager
 {
     private static string saveFileName = "gamesave.json";
-    
+
     // Cache the data so we don't read disk every frame
     private static GameSaveData currentData;
+
+    /// <summary>
+    /// When set, all reads/writes go here instead of persistentDataPath/gamesave.json.
+    /// Exists so the PlayMode test harness (which seeds and deletes saves in SetUp/TearDown)
+    /// cannot destroy the player's real progress — before this, running the test suite wiped
+    /// the same gamesave.json the editor and player use, which looked exactly like a bug:
+    /// souls back to 0 and every skill slot locked again.
+    /// Null = normal behavior.
+    /// </summary>
+    public static string SaveFilePathOverride { get; private set; }
+
+    /// <summary>Redirects the save file and drops the in-memory cache so the next read hits the new path.</summary>
+    public static void SetSaveFilePathOverride(string absolutePath)
+    {
+        SaveFilePathOverride = absolutePath;
+        currentData = null;
+    }
 
     public static GameSaveData GetRawData()
     {
@@ -74,8 +91,9 @@ public static class SaveManager
         // Debug.Log($"[SaveManager] Writing to disk... Game saved to: {path}");
     }
 
-    private static string GetSavePath()
+    public static string GetSavePath()
     {
+        if (!string.IsNullOrEmpty(SaveFilePathOverride)) return SaveFilePathOverride;
         return Path.Combine(Application.persistentDataPath, saveFileName);
     }
     

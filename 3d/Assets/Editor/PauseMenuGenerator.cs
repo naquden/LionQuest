@@ -59,19 +59,21 @@ public static class PauseMenuGenerator
 
         GameObject panel = BuildPanel(root.transform);
 
-        UiTheme.Text(panel.transform, "Title", "Paused", 56, TextAlignmentOptions.Center, UiTheme.Gold, FontStyles.Bold)
-            .rectTransform.anchoredPosition = new Vector2(0f, 220f);
+        TMP_Text title = UiTheme.Text(panel.transform, "Title", "Paused", 56, TextAlignmentOptions.Center, UiTheme.Gold, FontStyles.Bold);
+        title.rectTransform.anchoredPosition = new Vector2(0f, 220f);
         FixTitleRect(panel.transform);
 
         Transform menuPanel = BuildMenuPanel(panel.transform);
 
         Button resumeButton = CreateButton(menuPanel, "ResumeButton", "Resume");
+        // Same slot as Resume, shown only on game over (PauseMenuController.Awake hides it).
+        Button retryButton = CreateButton(menuPanel, "RetryButton", "Retry");
         Button characterSelectionButton = CreateButton(menuPanel, "CharacterSelectionButton", "Character Selection");
         Button exitButton = CreateButton(menuPanel, "ExitButton", "Exit");
 
-        WireNavigation(resumeButton, characterSelectionButton, exitButton);
+        WireNavigation(resumeButton, retryButton, characterSelectionButton, exitButton);
 
-        InputActionAssetWireInto(root, panel, resumeButton, characterSelectionButton, exitButton);
+        InputActionAssetWireInto(root, panel, title, resumeButton, retryButton, characterSelectionButton, exitButton);
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
         Object.DestroyImmediate(root);
@@ -142,9 +144,16 @@ public static class PauseMenuGenerator
         return button;
     }
 
-    static void WireNavigation(Button resume, Button characterSelection, Button exit)
+    /// <summary>
+    /// Explicit navigation with Resume and Retry on the same rung: exactly one of the two is ever
+    /// active. Character Selection's "up" is authored to Resume (the pause state) and repointed at
+    /// Retry by PauseMenuController.ShowGameOver — Unity's explicit navigation does not skip an
+    /// inactive target, it just refuses to move, so the up-link has to follow whichever is shown.
+    /// </summary>
+    static void WireNavigation(Button resume, Button retry, Button characterSelection, Button exit)
     {
         SetExplicitNavigation(resume, null, characterSelection);
+        SetExplicitNavigation(retry, null, characterSelection);
         SetExplicitNavigation(characterSelection, resume, exit);
         SetExplicitNavigation(exit, characterSelection, null);
     }
@@ -158,11 +167,14 @@ public static class PauseMenuGenerator
         button.navigation = nav;
     }
 
-    static void InputActionAssetWireInto(GameObject root, GameObject panel, Button resumeButton, Button characterSelectionButton, Button exitButton)
+    static void InputActionAssetWireInto(GameObject root, GameObject panel, TMP_Text title,
+        Button resumeButton, Button retryButton, Button characterSelectionButton, Button exitButton)
     {
         var controller = root.AddComponent<PauseMenuController>();
         var so = new SerializedObject(controller);
         so.FindProperty("panel").objectReferenceValue = panel;
+        so.FindProperty("titleText").objectReferenceValue = title;
+        so.FindProperty("retryButton").objectReferenceValue = retryButton;
         so.FindProperty("resumeButton").objectReferenceValue = resumeButton;
         so.FindProperty("characterSelectionButton").objectReferenceValue = characterSelectionButton;
         so.FindProperty("exitButton").objectReferenceValue = exitButton;

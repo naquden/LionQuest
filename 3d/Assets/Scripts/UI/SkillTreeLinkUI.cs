@@ -1,51 +1,69 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>
-/// One elbow link between a prereq node and its dependent: a horizontal segment, a vertical
-/// segment, and a diamond junction at the elbow. Grey when the source node is unranked,
-/// tinted to the branch colour once the source has rank >= 1. Built/positioned by
-/// SkillTreeScreenController.BuildLink at spawn time from two anchored node positions.
+/// One category tab down the left of the upgrade screen (replaces the old elbow link widget of the
+/// graph layout — kept the file/type name so existing prefab and generator references stay valid).
+/// Shows the category name, how many upgrades are owned in it, and a LOCKED marker for a skill whose
+/// Unlock row has not been bought. The selected tab is filled with the category's accent colour.
 /// </summary>
 public class SkillTreeLinkUI : MonoBehaviour
 {
-    [SerializeField] private RectTransform horizontalSegment;
-    [SerializeField] private RectTransform verticalSegment;
-    [SerializeField] private Image horizontalImage;
-    [SerializeField] private Image verticalImage;
-    [SerializeField] private Image junctionImage;
+    [SerializeField] private Image background;
+    [SerializeField] private Image selectionRing;
+    [SerializeField] private Image accentBar;
+    [SerializeField] private TMP_Text titleText;
+    [SerializeField] private TMP_Text subtitleText;
+    [SerializeField] private Button button;
 
-    private static Color UnboughtColor => UiPalette.GoldDim;
-
-    /// <summary>Lays out the elbow from `from` to `to` (both anchoredPosition in the same
-    /// parent space): horizontal run first, then vertical drop, meeting at the elbow corner.</summary>
-    public void Layout(Vector2 from, Vector2 to)
+    public void Setup(string title, Color accentColor, System.Action onClick)
     {
-        Vector2 elbow = new Vector2(to.x, from.y);
+        if (titleText != null) titleText.text = title;
+        if (accentBar != null) accentBar.color = accentColor;
 
-        float hLength = Mathf.Abs(elbow.x - from.x);
-        float vLength = Mathf.Abs(to.y - elbow.y);
-
-        if (horizontalSegment != null)
+        if (button != null)
         {
-            horizontalSegment.anchoredPosition = new Vector2((from.x + elbow.x) * 0.5f, from.y);
-            horizontalSegment.sizeDelta = new Vector2(Mathf.Max(hLength, 1f), horizontalSegment.sizeDelta.y);
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => onClick?.Invoke());
         }
-
-        if (verticalSegment != null)
-        {
-            verticalSegment.anchoredPosition = new Vector2(elbow.x, (elbow.y + to.y) * 0.5f);
-            verticalSegment.sizeDelta = new Vector2(verticalSegment.sizeDelta.x, Mathf.Max(vLength, 1f));
-        }
-
-        if (junctionImage != null) junctionImage.rectTransform.anchoredPosition = elbow;
     }
 
-    public void SetBranchColor(Color branchColor, bool active)
+    /// <summary>`owned`/`total` counts ranks bought vs available in this category. `paneFocused` is
+    /// whether the navigation cursor currently lives in the category list rather than the row list —
+    /// the selected tab stays marked either way, but only glows while it owns the cursor.</summary>
+    public void SetState(bool selected, bool paneFocused, bool locked, int owned, int total, Color accentColor)
     {
-        Color color = active ? branchColor : UnboughtColor;
-        if (horizontalImage != null) horizontalImage.color = color;
-        if (verticalImage != null) verticalImage.color = color;
-        if (junctionImage != null) junctionImage.color = color;
+        if (subtitleText != null)
+        {
+            subtitleText.text = locked ? "Locked" : $"{owned} / {total} bought";
+            subtitleText.color = locked ? UiPalette.TextMuted : UiPalette.TextLight;
+        }
+
+        if (titleText != null)
+        {
+            titleText.color = selected ? UiPalette.TextLight : UiPalette.TextMuted;
+        }
+
+        if (background != null)
+        {
+            background.color = selected
+                ? new Color(accentColor.r * 0.45f, accentColor.g * 0.45f, accentColor.b * 0.45f, 1f)
+                : UiPalette.SurfaceInset;
+        }
+
+        if (accentBar != null)
+        {
+            accentBar.color = selected ? accentColor : new Color(accentColor.r, accentColor.g, accentColor.b, 0.35f);
+        }
+
+        // Only the tab that owns the cursor gets the outline — same treatment as a focused row, so
+        // one glowing outline on screen always answers "where will Up/Down go?".
+        if (selectionRing != null)
+        {
+            bool showRing = selected && paneFocused;
+            selectionRing.gameObject.SetActive(showRing);
+            if (showRing) selectionRing.color = UiPalette.Gold;
+        }
     }
 }

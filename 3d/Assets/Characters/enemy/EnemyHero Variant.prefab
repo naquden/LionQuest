@@ -274,6 +274,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::EnemySetupHelper
   colliderRadius: 0.5
   colliderHeight: 2
+  healthBarPrefab: {fileID: 0}
+  healthBarOffset: {x: 0, y: 2.2, z: 0}
+  lootTable: {fileID: 0}
 --- !u!54 &7881325342412519552
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -339,8 +342,11 @@ MonoBehaviour:
   maxHealth: 100
   pullForce: 10
   pullRange: 15
+  stopDistance: 1.5
   maxPullVelocity: 3
   playerTag: Player
+  attackData: {fileID: 11400000, guid: 291f9806b3bcc47b3a00800b03faea5b, type: 2}
+  attackCooldown: 2
 --- !u!114 &3987571181011835951
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -372,7 +378,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatController
   knockbackMultiplier: 1
-  targetTag: Enemy
+  damageMultiplier: 1
+  targetTag: Player
   attackPoint: {fileID: 5379977614817169588}
   attackPointDistance: 0.8
   attackPointHeight: 1

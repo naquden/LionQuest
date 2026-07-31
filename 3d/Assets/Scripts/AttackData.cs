@@ -40,6 +40,11 @@ public class AttackData : ScriptableObject
 
     [Tooltip("Extra local-space offset applied to the spawn position.")]
     public Vector3 spawnOffset = Vector3.zero;
+
+    [Header("Hit Area")]
+    [Tooltip("World-space radius of the hit sphere. <= 0 keeps the effect prefab's authored collider. " +
+             "Requires the effect prefab's root to have a SphereCollider (AttackEffect.SetRadius).")]
+    public float hitRadius = 0f;
 }
 
 

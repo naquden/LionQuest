@@ -22,7 +22,24 @@ public class MapGenerator : MonoBehaviour
     
     [Tooltip("Height of the terrain")]
     [SerializeField] private float terrainHeight = 20f;
-    
+
+    [Tooltip("World position of the terrain's (0,0) corner. Terrain always spans origin..origin+mapSize, " +
+             "so to centre the island on world origin set this to (-mapSize.x/2, -islandTopHeight, -mapSize.y/2). " +
+             "Leave at zero to keep the legacy layout used by SampleScene.")]
+    [SerializeField] private Vector3 terrainOrigin = Vector3.zero;
+
+    /// <summary>
+    /// World-space centre of the island, on the terrain surface. Spawn points and cameras should be
+    /// placed relative to this rather than world origin — the terrain spans terrainOrigin..+mapSize,
+    /// so the island's middle is nowhere near (0,0,0) unless terrainOrigin says so.
+    /// </summary>
+    public Vector3 GetIslandCenter()
+    {
+        return new Vector3(terrainOrigin.x + mapSize.x * 0.5f,
+                           terrainOrigin.y + oceanDepth + heightAmplitude,
+                           terrainOrigin.z + mapSize.y * 0.5f);
+    }
+
     [Header("Terrain Settings")]
     [Tooltip("Generate flat terrain (no height variation)")]
     [SerializeField] private bool flatTerrain = false;
@@ -81,7 +98,12 @@ public class MapGenerator : MonoBehaviour
     
     [Tooltip("Maximum hole size")]
     [SerializeField] private float maxHoleSize = 5f;
-    
+
+    [Tooltip("How deep a hole is dug below the surrounding ground, in world units. Must stay below " +
+             "the waterline drop (oceanDepth * 0.25) or the map-wide water quad renders inside the " +
+             "pit — that reads as a blue chasm ringed with shore foam, not a hole.")]
+    [SerializeField] private float holeDepth = 1.2f;
+
     [Header("Auto Generation")]
     [Tooltip("Automatically generate map when game starts")]
     [SerializeField] private bool generateOnStart = true;
@@ -222,7 +244,7 @@ public class MapGenerator : MonoBehaviour
         
         // Set terrain size
         terrainData.size = new Vector3(mapSize.x, terrainHeight, mapSize.y);
-        terrain.transform.position = Vector3.zero;
+        terrain.transform.position = terrainOrigin;
         
         // Get terrain resolutions
         terrainResolution = terrainData.heightmapResolution;
@@ -416,8 +438,10 @@ public class MapGenerator : MonoBehaviour
         GameObject surface = GameObject.CreatePrimitive(PrimitiveType.Quad);
         surface.name = $"{WaterSurfacePrefix}0";
         surface.transform.SetParent(transform, false);
-        surface.transform.position = new Vector3(mapCenter.x, waterY, mapCenter.y);
-        surface.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+        // localPosition, not position: the terrain sits at terrainOrigin, and mapCenter/waterY are
+        // both terrain-local. Setting world position here would offset the water by terrainOrigin.
+        surface.transform.localPosition = new Vector3(mapCenter.x, waterY, mapCenter.y);
+        surface.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
         // Oversize past the map bounds so there's no visible seam at the terrain edge.
         float span = Mathf.Max(mapSize.x, mapSize.y) * 1.4f;
@@ -608,7 +632,11 @@ public class MapGenerator : MonoBehaviour
     }
     
     /// <summary>
-    /// Generates holes in the terrain
+    /// Digs the fall-through holes: paints the hole ground type and sinks the heightmap a fixed
+    /// holeDepth below the ground it started at. Depth is RELATIVE — an absolute drop to 0 puts the
+    /// hole floor below the map-wide water quad, so the pit fills with water and gets ringed by the
+    /// shader's shore foam, reading as a blue chasm instead of a pit. Holes are also kept out of the
+    /// ocean/shoreline: a hole below the waterline is invisible and unreachable.
     /// </summary>
     private void GenerateHoles()
     {
@@ -618,10 +646,15 @@ public class MapGenerator : MonoBehaviour
             Debug.LogWarning("MapGenerator: No hole ground type found. Skipping hole generation.");
             return;
         }
-        
+
         // Read the whole heightmap once, mutate locally, write once — a per-pixel
         // GetHeights/SetHeights round-trip inside the loop is orders of magnitude slower.
         float[,] heights = terrainData.GetHeights(0, 0, terrainResolution, terrainResolution);
+
+        float depthNormalized = Mathf.Clamp01(holeDepth / terrainHeight);
+        // Anything at or under the waterline is ocean/beach — no holes there.
+        float minGroundNormalized = (WaterSurfaceHeight() + holeDepth) / terrainHeight;
+        float pixelsPerUnit = terrainResolution / mapSize.x;
 
         for (int i = 0; i < holeCount; i++)
         {
@@ -631,7 +664,7 @@ public class MapGenerator : MonoBehaviour
 
             // Random size
             float holeSize = Random.Range(minHoleSize, maxHoleSize);
-            int holeRadius = Mathf.RoundToInt(holeSize * terrainResolution / mapSize.x);
+            int holeRadius = Mathf.RoundToInt(holeSize * pixelsPerUnit);
 
             // Create circular hole
             for (int dx = -holeRadius; dx <= holeRadius; dx++)
@@ -646,10 +679,11 @@ public class MapGenerator : MonoBehaviour
                         float distance = Mathf.Sqrt(dx * dx + dy * dy);
                         if (distance <= holeRadius)
                         {
-                            groundTypeMap[nx, ny] = holeType;
-
                             // Unity's heights array is indexed [y, x], groundTypeMap is [x, y].
-                            heights[ny, nx] = 0f;
+                            if (heights[ny, nx] < minGroundNormalized) continue;
+
+                            groundTypeMap[nx, ny] = holeType;
+                            heights[ny, nx] = Mathf.Max(0f, heights[ny, nx] - depthNormalized);
                         }
                     }
                 }

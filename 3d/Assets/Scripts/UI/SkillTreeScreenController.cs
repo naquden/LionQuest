@@ -5,49 +5,66 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Full-screen skill tree panel opened from CharacterSelection. No CharacterStats instance exists
-/// yet at this point (the player hasn't spawned), so this reads/writes CharacterSaveData directly
-/// through SaveManager + SkillTreeService — the same rules CharacterStats uses in-game.
-/// Every branch (attributes + all skill trees) is laid out at once, fanned outward from one shared
-/// root at bottom-centre — no tabs. Clicking a node only selects it (shows description + rank +
-/// before/after); a separate Buy button spends souls and advances the node's rank.
+/// Full-screen upgrade shop opened from CharacterSelection. No CharacterStats instance exists yet at
+/// this point (the player hasn't spawned), so this reads/writes CharacterSaveData directly through
+/// SaveManager + SkillTreeService — the same rules CharacterStats uses in-game.
+///
+/// Layout is deliberately a plain shop, not a graph: category tabs on the left (Body, then one per
+/// skill), a vertical list of upgrade rows for the selected category on the right. Everything a row
+/// costs and does is printed on the row itself, so there is no side panel, no legend, and nothing to
+/// pan or zoom.
+///
+/// Navigation is a two-pane focus model, not axis-per-list. Exactly one pane holds the cursor at a
+/// time: Up/Down always moves within the focused pane, Left/Right moves the cursor BETWEEN panes
+/// (left from the rows focuses the category list; right from the categories focuses the rows). That
+/// way a direction press always moves the visible highlight the way the stick points, instead of
+/// Left/Right silently changing a list the cursor isn't in.
 /// </summary>
 public class SkillTreeScreenController : MonoBehaviour
 {
-    private const float CellWidth = 130f;
-    private const float CellHeight = 130f;
-    private const float BranchGapX = 260f;
-
     [SerializeField] private GameObject panelRoot;
     [SerializeField] private TMP_Text characterNameText;
     [SerializeField] private TMP_Text soulsText;
-    [SerializeField] private RectTransform branchTotalsContainer;
-    [SerializeField] private GameObject branchTotalPrefab;
-    [SerializeField] private RectTransform nodeContainer;
-    [SerializeField] private GameObject nodePrefab;
-    [SerializeField] private RectTransform linkContainer;
-    [SerializeField] private GameObject linkPrefab;
-    [SerializeField] private TMP_Text descriptionText;
+    [SerializeField] private RectTransform categoryContainer;
+    [SerializeField] private GameObject categoryPrefab;
+    [SerializeField] private RectTransform rowContainer;
+    [SerializeField] private GameObject rowPrefab;
+    [SerializeField] private ScrollRect rowScrollRect;
+    [SerializeField] private TMP_Text categoryTitleText;
+    [SerializeField] private TMP_Text categorySummaryText;
+    [SerializeField] private TMP_Text statSummaryText;
+    [SerializeField] private TMP_Text helpText;
     [SerializeField] private Button buyButton;
     [SerializeField] private TMP_Text buyButtonText;
 
+    /// <summary>Which list the navigation cursor currently lives in.</summary>
+    private enum FocusPane { Categories, Rows }
+
     private CharacterDefinition definition;
     private CharacterSaveData save;
-    private string selectedNodeId;
-    private string selectedSkillId;
+    private int categoryIndex;
+    private int rowIndex;
+    private FocusPane focus = FocusPane.Categories;
 
-    private class SpawnedNode
-    {
-        public SkillTreeDefinition tree;
-        public SkillNodeDefinition node;
-        public SkillTreeNodeUI ui;
-        public Vector2 position;
-    }
-
-    private readonly List<SpawnedNode> spawnedNodes = new List<SpawnedNode>();
-    private readonly List<SkillTreeLinkUI> spawnedLinks = new List<SkillTreeLinkUI>();
-    private readonly List<TMP_Text> spawnedBranchTotals = new List<TMP_Text>();
+    private readonly List<SkillTreeLinkUI> spawnedCategories = new List<SkillTreeLinkUI>();
+    private readonly List<SkillTreeNodeUI> spawnedRows = new List<SkillTreeNodeUI>();
     private System.Action onClose;
+
+    private SkillTreeDefinition[] Categories =>
+        definition != null && definition.skillTrees != null ? definition.skillTrees : System.Array.Empty<SkillTreeDefinition>();
+
+    private SkillTreeDefinition CurrentCategory =>
+        Categories.Length > 0 ? Categories[Mathf.Clamp(categoryIndex, 0, Categories.Length - 1)] : null;
+
+    private SkillNodeDefinition[] CurrentRows
+    {
+        get
+        {
+            SkillTreeDefinition category = CurrentCategory;
+            if (category == null || category.nodes == null) return System.Array.Empty<SkillNodeDefinition>();
+            return category.nodes;
+        }
+    }
 
     private void Awake()
     {
@@ -60,14 +77,16 @@ public class SkillTreeScreenController : MonoBehaviour
         definition = character;
         save = SaveManager.LoadCharacter(character.characterID);
         onClose = onCloseCallback;
-        selectedNodeId = null;
-        selectedSkillId = null;
+        categoryIndex = 0;
+        rowIndex = 0;
+        focus = FocusPane.Categories;
 
         if (panelRoot != null) panelRoot.SetActive(true);
         if (characterNameText != null) characterNameText.text = character.displayName;
 
-        RebuildTree();
-        SelectDefaultNode();
+        BuildCategories();
+        BuildRows();
+        Refresh();
     }
 
     public void Close()
@@ -79,387 +98,378 @@ public class SkillTreeScreenController : MonoBehaviour
         onClose = null;
     }
 
-    /// <summary>Moves the node cursor to the nearest node in the pressed direction (spatial
-    /// navigation across the unified canvas, not a walk through a flat list).</summary>
+    /// <summary>Up/Down moves inside the focused pane; Left/Right moves the cursor between the two
+    /// panes. The highlight always follows the direction pressed.</summary>
     public void Navigate(Vector2 direction)
     {
-        if (spawnedNodes.Count == 0 || direction.sqrMagnitude < 0.01f) return;
+        if (definition == null) return;
 
-        SpawnedNode current = FindSelected();
-        if (current == null)
+        if (Mathf.Abs(direction.x) > Mathf.Abs(direction.y))
         {
-            SelectDefaultNode();
-            return;
+            if (Mathf.Abs(direction.x) < 0.5f) return;
+            SetFocus(direction.x > 0f ? FocusPane.Rows : FocusPane.Categories);
         }
-
-        Vector2 dir = direction.normalized;
-        SpawnedNode best = null;
-        float bestScore = float.MaxValue;
-
-        foreach (SpawnedNode candidate in spawnedNodes)
+        else
         {
-            if (candidate == current) continue;
-            Vector2 offset = candidate.position - current.position;
-            float alongDir = Vector2.Dot(offset, dir);
-            if (alongDir <= 0.01f) continue;
-
-            float lateral = (offset - dir * alongDir).magnitude;
-            float score = alongDir + lateral * 2f;
-            if (score < bestScore)
-            {
-                bestScore = score;
-                best = candidate;
-            }
+            if (Mathf.Abs(direction.y) < 0.5f) return;
+            // Screen-space: up on the stick moves to the entry above (earlier in the list).
+            int step = direction.y > 0f ? -1 : 1;
+            if (focus == FocusPane.Categories) SelectCategory(categoryIndex + step);
+            else SelectRow(rowIndex + step);
         }
-
-        if (best != null) Select(best.tree.skillId, best.node.nodeId);
     }
 
-    public void SubmitSelected() => BuySelected();
+    /// <summary>Moves the cursor to a pane. Focusing the rows of a category with no rows is a no-op,
+    /// so the cursor can never land somewhere with nothing to highlight.</summary>
+    private void SetFocus(FocusPane pane)
+    {
+        if (pane == focus) return;
+        if (pane == FocusPane.Rows && CurrentRows.Length == 0) return;
+
+        focus = pane;
+        Refresh();
+        if (focus == FocusPane.Rows) ScrollSelectedIntoView();
+    }
+
+    /// <summary>Submit in the category pane steps INTO that category's rows — the natural "drill in"
+    /// press for a player who just picked a group. In the row pane it buys.</summary>
+    public void SubmitSelected()
+    {
+        if (definition == null) return;
+
+        if (focus == FocusPane.Categories)
+        {
+            SetFocus(FocusPane.Rows);
+            return;
+        }
+        BuySelected();
+    }
+
+    /// <summary>Cancel walks back out the way Submit walked in: rows -> categories -> close screen.
+    /// Never closes straight out of the row list, so Cancel is the exact inverse of Submit.</summary>
+    public void CancelPressed()
+    {
+        if (focus == FocusPane.Rows)
+        {
+            SetFocus(FocusPane.Categories);
+            return;
+        }
+        Close();
+    }
+
+    private void SelectCategory(int index)
+    {
+        if (Categories.Length == 0) return;
+        int clamped = Mathf.Clamp(index, 0, Categories.Length - 1);
+        if (clamped == categoryIndex) return;
+
+        categoryIndex = clamped;
+        rowIndex = 0;
+        BuildRows();
+        Refresh();
+    }
+
+    private void SelectRow(int index)
+    {
+        int count = CurrentRows.Length;
+        if (count == 0) return;
+
+        int clamped = Mathf.Clamp(index, 0, count - 1);
+        if (clamped == rowIndex) return;
+
+        rowIndex = clamped;
+        Refresh();
+        ScrollSelectedIntoView();
+    }
 
     private void BuySelected()
     {
-        if (definition == null || save == null || selectedNodeId == null) return;
+        SkillNodeDefinition row = SelectedRow();
+        if (definition == null || save == null || row == null) return;
 
-        if (!SkillTreeService.TryPurchase(definition, save, selectedSkillId, selectedNodeId)) return;
+        if (!SkillTreeService.TryPurchase(definition, save, CurrentCategory.skillId, row.nodeId)) return;
 
         SaveManager.SaveCharacter(save);
-        RefreshAllStates();
+        Refresh();
     }
 
-    private void Select(string skillId, string nodeId)
+    private SkillNodeDefinition SelectedRow()
     {
-        selectedSkillId = skillId;
-        selectedNodeId = nodeId;
-        RefreshAllStates();
-        CenterViewOnSelected();
+        SkillNodeDefinition[] rows = CurrentRows;
+        if (rows.Length == 0) return null;
+        return rows[Mathf.Clamp(rowIndex, 0, rows.Length - 1)];
     }
 
-    /// <summary>Scrolls the node canvas so the selected node sits in the viewport centre —
-    /// keyboard/gamepad navigation must never leave the cursor off-screen.</summary>
-    private void CenterViewOnSelected()
+    // ------------------------------------------------------------------
+    // Spawning
+    // ------------------------------------------------------------------
+
+    private void BuildCategories()
     {
-        SpawnedNode selected = FindSelected();
-        if (selected == null || nodeContainer == null) return;
+        foreach (SkillTreeLinkUI tab in spawnedCategories) if (tab != null) Destroy(tab.gameObject);
+        spawnedCategories.Clear();
 
-        var viewport = nodeContainer.parent as RectTransform;
-        if (viewport == null) return;
+        if (categoryContainer == null || categoryPrefab == null) return;
 
-        float viewportWidth = viewport.rect.width;
+        for (int i = 0; i < Categories.Length; i++)
+        {
+            SkillTreeDefinition category = Categories[i];
+            GameObject go = Instantiate(categoryPrefab, categoryContainer);
+            var tab = go.GetComponent<SkillTreeLinkUI>();
+            if (tab == null) continue;
+
+            int captured = i;
+            tab.Setup(category.displayName, category.branchColor, () =>
+            {
+                // Clicking a tab must also move the cursor there, or the focus ring would sit in the
+                // row list while the stick appears to control the tabs.
+                focus = FocusPane.Categories;
+                SelectCategory(captured);
+                Refresh();
+            });
+            spawnedCategories.Add(tab);
+        }
+    }
+
+    private void BuildRows()
+    {
+        foreach (SkillTreeNodeUI row in spawnedRows) if (row != null) Destroy(row.gameObject);
+        spawnedRows.Clear();
+
+        if (rowContainer == null || rowPrefab == null) return;
+
+        SkillTreeDefinition category = CurrentCategory;
+        if (category == null) return;
+
+        SkillNodeDefinition[] rows = CurrentRows;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            SkillNodeDefinition node = rows[i];
+            GameObject go = Instantiate(rowPrefab, rowContainer);
+            var ui = go.GetComponent<SkillTreeNodeUI>();
+            if (ui == null) continue;
+
+            int captured = i;
+            ui.Setup(node, category.branchColor, () =>
+            {
+                // Second click on the already-focused row buys it; the first only moves the cursor,
+                // so a mouse user can't buy something by clicking once in the wrong place.
+                bool wasFocusedHere = focus == FocusPane.Rows && captured == rowIndex;
+                focus = FocusPane.Rows;
+                rowIndex = captured;
+
+                if (wasFocusedHere)
+                {
+                    BuySelected();
+                    return;
+                }
+                Refresh();
+            });
+            spawnedRows.Add(ui);
+        }
+    }
+
+    /// <summary>Keeps the highlighted row inside the viewport. The list is short by design, but a
+    /// category with many rows must never hide the cursor.</summary>
+    private void ScrollSelectedIntoView()
+    {
+        if (rowScrollRect == null || rowContainer == null) return;
+        if (rowIndex < 0 || rowIndex >= spawnedRows.Count) return;
+
+        Canvas.ForceUpdateCanvases();
+
+        RectTransform viewport = rowScrollRect.viewport != null ? rowScrollRect.viewport : (RectTransform)rowScrollRect.transform;
+        float contentHeight = rowContainer.rect.height;
         float viewportHeight = viewport.rect.height;
-        float contentWidth = nodeContainer.rect.width;
-        float contentHeight = nodeContainer.rect.height;
-
-        float targetX = viewportWidth * 0.5f - selected.position.x;
-        float targetY = -viewportHeight * 0.5f - selected.position.y;
-
-        float minX = Mathf.Min(0f, viewportWidth - contentWidth);
-        float maxX = Mathf.Max(0f, viewportWidth - contentWidth);
-        float minY = Mathf.Min(0f, viewportHeight - contentHeight);
-        float maxY = Mathf.Max(0f, viewportHeight - contentHeight);
-
-        nodeContainer.anchoredPosition = new Vector2(
-            Mathf.Clamp(targetX, minX, maxX),
-            Mathf.Clamp(targetY, minY, maxY));
-    }
-
-    private void SelectDefaultNode()
-    {
-        SpawnedNode first = spawnedNodes.FirstOrDefault(n => n.node.tier == SkillNodeTier.Keystone)
-            ?? spawnedNodes.FirstOrDefault();
-        if (first != null) Select(first.tree.skillId, first.node.nodeId);
-    }
-
-    private SpawnedNode FindSelected()
-    {
-        return spawnedNodes.FirstOrDefault(n => n.tree.skillId == selectedSkillId && n.node.nodeId == selectedNodeId);
-    }
-
-    // ------------------------------------------------------------------
-    // Layout — every tree fanned outward from one shared root at bottom-centre
-    // ------------------------------------------------------------------
-
-    private void RebuildTree()
-    {
-        ClearSpawned();
-
-        if (definition == null || definition.skillTrees == null || definition.skillTrees.Length == 0) return;
-        if (soulsText != null) soulsText.text = $"Souls: {save.souls}";
-
-        var positions = new Dictionary<(string skillId, string nodeId), Vector2>();
-        int treeCount = definition.skillTrees.Length;
-        float totalWidth = (treeCount - 1) * BranchGapX;
-        float startX = -totalWidth * 0.5f;
-
-        for (int t = 0; t < treeCount; t++)
+        if (contentHeight <= viewportHeight)
         {
-            SkillTreeDefinition tree = definition.skillTrees[t];
-            if (tree.nodes == null) continue;
-
-            float branchOriginX = startX + t * BranchGapX;
-
-            foreach (SkillNodeDefinition node in tree.nodes)
-            {
-                Vector2 pos = new Vector2(branchOriginX + node.gridPos.x * CellWidth, node.gridPos.y * CellHeight);
-                positions[(tree.skillId, node.nodeId)] = pos;
-
-                GameObject go = Instantiate(nodePrefab, nodeContainer);
-                var rect = (RectTransform)go.transform;
-                rect.anchoredPosition = pos;
-
-                var nodeUi = go.GetComponent<SkillTreeNodeUI>();
-                nodeUi.Setup(node, () => Select(tree.skillId, node.nodeId));
-
-                spawnedNodes.Add(new SpawnedNode { tree = tree, node = node, ui = nodeUi, position = pos });
-            }
-        }
-
-        foreach (SpawnedNode spawned in spawnedNodes)
-        {
-            if (spawned.node.prereqNodeIds == null) continue;
-            foreach (string prereqId in spawned.node.prereqNodeIds)
-            {
-                if (!positions.TryGetValue((spawned.tree.skillId, prereqId), out Vector2 from)) continue;
-                spawnedLinks.Add(BuildLink(from, spawned.position, spawned.tree, prereqId));
-            }
-        }
-
-        BuildBranchTotals();
-        FitContainerToContent();
-        RefreshAllStates();
-    }
-
-    private SkillTreeLinkUI BuildLink(Vector2 from, Vector2 to, SkillTreeDefinition tree, string prereqNodeId)
-    {
-        GameObject go = Instantiate(linkPrefab, linkContainer);
-        var link = go.GetComponent<SkillTreeLinkUI>();
-        link.Layout(from, to);
-
-        bool active = SkillTreeService.GetRank(save, tree.skillId, prereqNodeId) >= 1;
-        link.SetBranchColor(tree.branchColor, active);
-        return link;
-    }
-
-    private void BuildBranchTotals()
-    {
-        foreach (var text in spawnedBranchTotals) if (text != null) Destroy(text.gameObject);
-        spawnedBranchTotals.Clear();
-
-        if (branchTotalsContainer == null || branchTotalPrefab == null) return;
-
-        foreach (SkillTreeDefinition tree in definition.skillTrees)
-        {
-            GameObject go = Instantiate(branchTotalPrefab, branchTotalsContainer);
-            TMP_Text text = go.GetComponent<TMP_Text>();
-            if (text != null)
-            {
-                text.color = tree.branchColor;
-                spawnedBranchTotals.Add(text);
-            }
-        }
-
-        RefreshBranchTotals();
-    }
-
-    private void RefreshBranchTotals()
-    {
-        for (int i = 0; i < definition.skillTrees.Length && i < spawnedBranchTotals.Count; i++)
-        {
-            SkillTreeDefinition tree = definition.skillTrees[i];
-            int spent = SpentOnTree(tree);
-            spawnedBranchTotals[i].text = $"{tree.displayName.ToUpperInvariant()} {spent}";
-        }
-    }
-
-    private int SpentOnTree(SkillTreeDefinition tree)
-    {
-        int spent = 0;
-        if (tree.nodes == null) return 0;
-        foreach (SkillNodeDefinition node in tree.nodes)
-        {
-            spent += SkillTreeService.GetRank(save, tree.skillId, node.nodeId) * node.cost;
-        }
-        return spent;
-    }
-
-    /// <summary>Sizes the node container to the true bounds of all spawned nodes, not a fixed
-    /// oversized guess — avoids the blank-viewport regression from mismatched anchoring.</summary>
-    private void FitContainerToContent()
-    {
-        if (nodeContainer == null || spawnedNodes.Count == 0) return;
-
-        float minX = spawnedNodes.Min(n => n.position.x);
-        float maxX = spawnedNodes.Max(n => n.position.x);
-        float minY = spawnedNodes.Min(n => n.position.y);
-        float maxY = spawnedNodes.Max(n => n.position.y);
-
-        const float padding = 150f;
-        float width = (maxX - minX) + padding * 2f;
-        float height = (maxY - minY) + padding * 2f;
-
-        nodeContainer.sizeDelta = new Vector2(width, height);
-
-        // Shift every spawned node/link so the bounds' min corner sits at the padded origin —
-        // container is top-left anchored, so content must live in positive-x, negative-y space.
-        Vector2 shift = new Vector2(-minX + padding, -maxY - padding);
-        foreach (SpawnedNode spawned in spawnedNodes)
-        {
-            spawned.position += shift;
-            spawned.ui.Rect.anchoredPosition = spawned.position;
-        }
-
-        RelayoutLinks(shift);
-    }
-
-    private void RelayoutLinks(Vector2 shift)
-    {
-        int linkIndex = 0;
-        foreach (SpawnedNode spawned in spawnedNodes)
-        {
-            if (spawned.node.prereqNodeIds == null) continue;
-            foreach (string prereqId in spawned.node.prereqNodeIds)
-            {
-                SpawnedNode from = spawnedNodes.FirstOrDefault(n => n.tree.skillId == spawned.tree.skillId && n.node.nodeId == prereqId);
-                if (from == null) continue;
-                if (linkIndex >= spawnedLinks.Count) break;
-                spawnedLinks[linkIndex].Layout(from.position, spawned.position);
-                linkIndex++;
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // State refresh
-    // ------------------------------------------------------------------
-
-    private void RefreshAllStates()
-    {
-        if (definition == null || save == null) return;
-        if (soulsText != null) soulsText.text = $"Souls: {save.souls}";
-
-        foreach (SpawnedNode spawned in spawnedNodes)
-        {
-            int rank = SkillTreeService.GetRank(save, spawned.tree.skillId, spawned.node.nodeId);
-            bool prereqsMet = SkillTreeService.ArePrereqsMet(save, spawned.tree.skillId, spawned.node);
-            bool isSelected = spawned.tree.skillId == selectedSkillId && spawned.node.nodeId == selectedNodeId;
-
-            SkillNodeVisualState state;
-            if (isSelected)
-            {
-                state = SkillNodeVisualState.Selected;
-            }
-            else if (rank >= spawned.node.maxRank)
-            {
-                state = SkillNodeVisualState.Maxed;
-            }
-            else if (!prereqsMet)
-            {
-                state = SkillNodeVisualState.Locked;
-            }
-            else if (rank > 0)
-            {
-                state = SkillNodeVisualState.Ranked;
-            }
-            else if (save.souls >= spawned.node.cost)
-            {
-                state = SkillNodeVisualState.Affordable;
-            }
-            else
-            {
-                state = SkillNodeVisualState.Unaffordable;
-            }
-
-            spawned.ui.SetState(state, rank, spawned.node.maxRank, spawned.node.cost, spawned.tree.branchColor);
-        }
-
-        RelinkColors();
-        RefreshBranchTotals();
-        RefreshDescription();
-    }
-
-    private void RelinkColors()
-    {
-        int linkIndex = 0;
-        foreach (SpawnedNode spawned in spawnedNodes)
-        {
-            if (spawned.node.prereqNodeIds == null) continue;
-            foreach (string prereqId in spawned.node.prereqNodeIds)
-            {
-                if (linkIndex >= spawnedLinks.Count) break;
-                bool active = SkillTreeService.GetRank(save, spawned.tree.skillId, prereqId) >= 1;
-                spawnedLinks[linkIndex].SetBranchColor(spawned.tree.branchColor, active);
-                linkIndex++;
-            }
-        }
-    }
-
-    private void RefreshDescription()
-    {
-        SpawnedNode selected = FindSelected();
-        if (selected == null)
-        {
-            if (descriptionText != null) descriptionText.text = "Select a node to see what it does.";
-            SetBuyState(false, "");
+            rowScrollRect.verticalNormalizedPosition = 1f;
             return;
         }
 
-        SkillNodeDefinition node = selected.node;
-        SkillTreeDefinition tree = selected.tree;
-        int rank = SkillTreeService.GetRank(save, tree.skillId, node.nodeId);
-        bool prereqsMet = SkillTreeService.ArePrereqsMet(save, tree.skillId, node);
-        bool canAfford = save.souls >= node.cost;
-        bool maxed = rank >= node.maxRank;
+        var rowRect = (RectTransform)spawnedRows[rowIndex].transform;
+        // Row anchoredPosition.y is negative going down from the content's top edge.
+        float rowCenterFromTop = -rowRect.anchoredPosition.y;
+        float target = (rowCenterFromTop - viewportHeight * 0.5f) / (contentHeight - viewportHeight);
+        rowScrollRect.verticalNormalizedPosition = 1f - Mathf.Clamp01(target);
+    }
 
-        string effectLine = string.IsNullOrEmpty(node.description) ? node.displayName : node.description;
-        string rankLine = node.maxRank > 1 ? $"Rank {rank} / {node.maxRank}" : (rank >= 1 ? "Unlocked" : "");
-        string beforeAfter = BuildBeforeAfterLine(tree, node, rank);
+    // ------------------------------------------------------------------
+    // Refresh
+    // ------------------------------------------------------------------
 
-        if (descriptionText != null)
+    private void Refresh()
+    {
+        if (definition == null || save == null) return;
+
+        if (soulsText != null) soulsText.text = $"{save.souls} souls to spend";
+
+        SkillTreeDefinition category = CurrentCategory;
+        SkillNodeDefinition[] rows = CurrentRows;
+
+        for (int i = 0; i < spawnedCategories.Count && i < Categories.Length; i++)
         {
-            var lines = new List<string> { node.displayName, effectLine };
-            if (!string.IsNullOrEmpty(rankLine)) lines.Add(rankLine);
-            if (!string.IsNullOrEmpty(beforeAfter)) lines.Add(beforeAfter);
-            if (maxed) lines.Add("Fully upgraded.");
-            else if (!prereqsMet) lines.Add("Unlock a node above first.");
-            else lines.Add($"Costs {node.cost} souls.");
+            SkillTreeDefinition tab = Categories[i];
+            SkillNodeDefinition gate = SkillTreeService.FindUnlockNode(tab);
+            bool locked = gate != null && SkillTreeService.GetRank(save, tab.skillId, gate.nodeId) < 1;
 
-            descriptionText.text = string.Join("\n\n", lines.Where(l => !string.IsNullOrEmpty(l)));
+            int owned = 0, total = 0;
+            if (tab.nodes != null)
+            {
+                foreach (SkillNodeDefinition node in tab.nodes)
+                {
+                    owned += SkillTreeService.GetRank(save, tab.skillId, node.nodeId);
+                    total += node.maxRank;
+                }
+            }
+
+            spawnedCategories[i].SetState(
+                i == categoryIndex, focus == FocusPane.Categories, locked, owned, total, tab.branchColor);
         }
 
-        if (maxed) SetBuyState(false, "Maxed");
-        else if (!prereqsMet) SetBuyState(false, "Locked");
-        else SetBuyState(canAfford, $"Buy — {node.cost} souls");
+        if (category != null)
+        {
+            if (categoryTitleText != null) categoryTitleText.text = category.displayName;
+            if (categorySummaryText != null) categorySummaryText.text = category.summary;
+        }
+
+        for (int i = 0; i < spawnedRows.Count && i < rows.Length; i++)
+        {
+            SkillNodeDefinition node = rows[i];
+            int rank = SkillTreeService.GetRank(save, category.skillId, node.nodeId);
+            bool available = SkillTreeService.IsRowAvailable(category, save, node);
+            int price = SkillTreeService.GetNextCost(save, category.skillId, node);
+            bool maxed = rank >= node.maxRank;
+
+            SkillNodeVisualState state;
+            if (maxed) state = SkillNodeVisualState.Maxed;
+            else if (!available) state = SkillNodeVisualState.Locked;
+            else if (save.souls >= price) state = SkillNodeVisualState.Affordable;
+            else state = SkillNodeVisualState.Unaffordable;
+
+            spawnedRows[i].SetState(
+                state,
+                i == rowIndex,
+                focus == FocusPane.Rows,
+                rank,
+                node.maxRank,
+                price,
+                Mathf.Max(0, price - save.souls),
+                BuildChangeLine(category, node, rank),
+                category.branchColor);
+        }
+
+        RefreshStatSummary();
+        RefreshBuyButton();
+        RefreshHelpText();
     }
 
-    private string BuildBeforeAfterLine(SkillTreeDefinition tree, SkillNodeDefinition node, int currentRank)
+    /// <summary>Prompts describe only what the currently focused pane can do, so the hint never lists
+    /// a press that does nothing right now.</summary>
+    private void RefreshHelpText()
     {
-        if (tree.displayBases == null) return null;
-        SkillDisplayBase basis = tree.displayBases.FirstOrDefault(b => b.effect == node.effect);
-        if (basis == null) return null;
+        if (helpText == null) return;
 
-        var beforeSave = new CharacterSaveData(save.characterID) { souls = save.souls, purchasedSkillNodes = save.purchasedSkillNodes };
-        float before = SkillTreeService.GetValue(SkillTreeService.ResolveSkillValues(definition, beforeSave), tree.skillId, node.effect, basis.baseValue);
-
-        // Simulate one more rank of this node to compute "after".
-        var afterSave = new CharacterSaveData(save.characterID) { souls = save.souls, purchasedSkillNodes = new List<string>(save.purchasedSkillNodes) };
-        SkillTreeService.TryPurchase(definition, afterSave, tree.skillId, node.nodeId);
-        float after = SkillTreeService.GetValue(SkillTreeService.ResolveSkillValues(definition, afterSave), tree.skillId, node.effect, basis.baseValue);
-
-        if (Mathf.Approximately(before, after)) return null;
-        return $"{node.effect} {before}{basis.unit} → {after}{basis.unit}";
+        helpText.text = focus == FocusPane.Categories
+            ? "Up / Down: choose a group     Right or A: see its upgrades     B: back"
+            : "Up / Down: choose an upgrade     A: buy     Left or B: back to groups";
     }
+
+    /// <summary>Always-visible readout of what the player actually has right now, so the effect of a
+    /// purchase is visible without reading any node text.</summary>
+    private void RefreshStatSummary()
+    {
+        if (statSummaryText == null) return;
+
+        int strength = SkillTreeService.GetAttributeLevel(definition, save, SkillEffect.Strength);
+        int health = SkillTreeService.GetAttributeLevel(definition, save, SkillEffect.Health);
+        int speed = SkillTreeService.GetAttributeLevel(definition, save, SkillEffect.Speed);
+
+        float baseMaxHealth = definition != null ? definition.baseMaxHealth : 100f;
+        float damagePercent = (strength - 1) * 20f;
+        float maxHealth = baseMaxHealth + (health - 1) * 20f;
+        float speedPercent = (speed - 1) * 10f;
+
+        statSummaryText.text =
+            $"Damage +{damagePercent:0}%     Health {maxHealth:0}     Move speed +{speedPercent:0}%";
+    }
+
+    private void RefreshBuyButton()
+    {
+        SkillNodeDefinition row = SelectedRow();
+        SkillTreeDefinition category = CurrentCategory;
+        if (row == null || category == null)
+        {
+            SetBuyState(false, "Buy");
+            return;
+        }
+
+        // While the cursor is in the tab list, Submit drills into the category rather than buying —
+        // the button has to say so, or it advertises a purchase that press won't make.
+        if (focus == FocusPane.Categories)
+        {
+            SetBuyState(false, $"Pick an upgrade in {category.displayName}");
+            return;
+        }
+
+        int rank = SkillTreeService.GetRank(save, category.skillId, row.nodeId);
+        bool available = SkillTreeService.IsRowAvailable(category, save, row);
+        int price = SkillTreeService.GetNextCost(save, category.skillId, row);
+
+        if (rank >= row.maxRank) SetBuyState(false, "Already bought");
+        else if (!available) SetBuyState(false, "Unlock this skill first");
+        else if (save.souls < price) SetBuyState(false, $"Need {price - save.souls} more souls");
+        else SetBuyState(true, $"Buy for {price} souls");
+    }
+
+    /// <summary>Greys the button out whenever it can't be pressed. Without this it stays bright
+    /// green while reading "Need 250 more souls", which looks clickable.</summary>
+    private void ApplyBuyButtonTint(bool interactable)
+    {
+        if (buyButton == null) return;
+
+        var image = buyButton.targetGraphic as Graphic;
+        if (image != null) image.color = interactable ? UiPalette.Purchased : UiPalette.SurfaceInset;
+        if (buyButtonText != null) buyButtonText.color = interactable ? UiPalette.TextLight : UiPalette.TextMuted;
+    }
+
+    /// <summary>"10s -> 8s" for the selected row's effect, using the category's authored base value.
+    /// Returns empty when the effect has no displayable base (e.g. the Unlock row).</summary>
+    private string BuildChangeLine(SkillTreeDefinition category, SkillNodeDefinition node, int currentRank)
+    {
+        if (category.displayBases == null || node.effect == SkillEffect.Unlock) return string.Empty;
+
+        SkillDisplayBase basis = category.displayBases.FirstOrDefault(b => b.effect == node.effect);
+        if (basis == null) return string.Empty;
+
+        var resolvedNow = SkillTreeService.ResolveSkillValues(definition, save);
+        float before = SkillTreeService.GetValue(resolvedNow, category.skillId, node.effect, basis.baseValue);
+
+        if (currentRank >= node.maxRank)
+        {
+            return $"Now {Format(before)}{basis.unit}";
+        }
+
+        // Simulate one more rank without touching the live save.
+        var preview = new CharacterSaveData(save.characterID)
+        {
+            souls = int.MaxValue,
+            purchasedSkillNodes = new List<string>(save.purchasedSkillNodes),
+        };
+        SkillTreeService.TryPurchase(definition, preview, category.skillId, node.nodeId);
+        float after = SkillTreeService.GetValue(
+            SkillTreeService.ResolveSkillValues(definition, preview), category.skillId, node.effect, basis.baseValue);
+
+        if (Mathf.Approximately(before, after)) return string.Empty;
+        return $"{Format(before)}{basis.unit} → {Format(after)}{basis.unit}";
+    }
+
+    private static string Format(float value) => value.ToString("0.##");
 
     private void SetBuyState(bool interactable, string label)
     {
         if (buyButton != null) buyButton.interactable = interactable;
         if (buyButtonText != null) buyButtonText.text = label;
-    }
-
-    private void ClearSpawned()
-    {
-        foreach (var node in spawnedNodes) if (node.ui != null) Destroy(node.ui.gameObject);
-        foreach (var link in spawnedLinks) if (link != null) Destroy(link.gameObject);
-        spawnedNodes.Clear();
-        spawnedLinks.Clear();
+        ApplyBuyButtonTint(interactable);
     }
 }

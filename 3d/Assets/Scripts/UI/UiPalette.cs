@@ -17,6 +17,10 @@ public static class UiPalette
     public static readonly Color TextMuted = new Color(0.659f, 0.573f, 0.420f, 1f);
     public static readonly Color Locked = new Color(0.141f, 0.102f, 0.067f, 1f);
 
+    /// <summary>Unfilled rank pip. Deliberately NOT Locked — that value is within 0.02 of
+    /// SurfaceInset, so pips drawn in it were invisible on unselected rows.</summary>
+    public static readonly Color PipEmpty = new Color(0.353f, 0.278f, 0.196f, 1f);
+
     public static readonly Color Purchased = new Color(0.478f, 0.620f, 0.247f, 1f);
     public static readonly Color Affordable = Gold;
     public static readonly Color Unaffordable = TextMuted;

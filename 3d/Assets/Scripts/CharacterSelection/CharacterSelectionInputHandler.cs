@@ -20,6 +20,17 @@ public class CharacterSelectionInputHandler : MonoBehaviour
     private const float NavigateRepeatDelay = 0.35f;
     private float lastNavigateTime = -999f;
 
+    // True while the button that spawned this player is still held. PlayerInputManager joins on
+    // buttonSouth, which is also UI/Submit — so the UI map is enabled mid-press and Submit reports
+    // WasPressedThisFrame on this handler's very first Update. That confirmed the carousel's default
+    // character off the join press itself: the slot jumped Selecting -> Ready before the player could
+    // move the carousel (NavigateCarousel ignores a Ready slot), making every character except index
+    // 0 unreachable. Swallow Submit until we've seen the button actually released once.
+    // Starts true because this component is created *by* the join press. If a slot ever appears
+    // without one being held, the first Update clears the flag and nothing is swallowed — on that
+    // frame the button is not down, so WasPressedThisFrame is false anyway.
+    private bool awaitingSubmitRelease = true;
+
     private void Awake()
     {
         playerInput = GetComponent<PlayerInput>();
@@ -47,6 +58,18 @@ public class CharacterSelectionInputHandler : MonoBehaviour
     {
         if (slotIndex < 0 || CharacterSelectionManager.Instance == null) return;
 
+        // Cleared before the Upgrading early-out, so the flag can't get stuck while the panel is open.
+        // The action must be enabled (a disabled InputAction reports IsPressed() == false whatever its
+        // control is doing) AND show neither a held state nor a press edge this frame. Both checks are
+        // needed: a held join button fails IsPressed, while a join press that already released before
+        // the UI map's first poll fails only WasPressedThisFrame — the queued edge is still waiting to
+        // be consumed on this exact frame, which is how the join press confirmed the default character.
+        if (awaitingSubmitRelease && submitAction != null && submitAction.enabled
+            && !submitAction.IsPressed() && !submitAction.WasPressedThisFrame())
+        {
+            awaitingSubmitRelease = false;
+        }
+
         if (CharacterSelectionManager.Instance.IsSlotUpgrading(slotIndex))
         {
             UpdateUpgradePanelInput();
@@ -59,7 +82,7 @@ public class CharacterSelectionInputHandler : MonoBehaviour
             return;
         }
 
-        if (submitAction != null && submitAction.WasPressedThisFrame())
+        if (!awaitingSubmitRelease && submitAction != null && submitAction.WasPressedThisFrame())
         {
             CharacterSelectionManager.Instance.TryConfirm(slotIndex);
         }

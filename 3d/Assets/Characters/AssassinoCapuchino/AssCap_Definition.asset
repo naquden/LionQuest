@@ -18,197 +18,101 @@ MonoBehaviour:
   portraitLocked: {fileID: 0}
   unlockedByDefault: 1
   playerPrefab: {fileID: 7565404103289180475, guid: 50ee41024563a4e19a75c625a2c384cc, type: 3}
+  baseMaxHealth: 100
+  baseMoveSpeed: 3
   skillTrees:
   - skillId: attributes
-    displayName: Attributes
+    displayName: Body
     skillSlot: 0
     branchColor: {r: 0.4, g: 0.8, b: 0.35, a: 1}
     target: 1
+    summary: Always available. Makes your character stronger no matter which skills
+      you use.
     displayBases: []
     nodes:
-    - nodeId: root
-      displayName: Attributes
-      description: Spend souls on Strength, Health, and Speed.
-      effect: 0
-      op: 0
-      value: 0
-      cost: 0
-      maxRank: 1
-      tier: 0
-      prereqNodeIds: []
-      gridPos: {x: 0, y: 0}
     - nodeId: strength_1
-      displayName: +1 Strength
-      description: Increases damage dealt.
+      displayName: Hit harder
+      description: Every attack you make deals 20% more damage.
       effect: 7
       op: 0
       value: 1
       cost: 10
+      costIncrement: 5
       maxRank: 5
-      tier: 2
-      prereqNodeIds:
-      - root
-      gridPos: {x: -2, y: 1}
-    - nodeId: strength_2
-      displayName: +1 Strength (Major)
-      description: A bigger jump in damage dealt.
-      effect: 7
-      op: 0
-      value: 1
-      cost: 25
-      maxRank: 3
-      tier: 1
-      prereqNodeIds:
-      - strength_1
-      gridPos: {x: -2, y: 2}
     - nodeId: health_1
-      displayName: +1 Health
-      description: Increases max health.
+      displayName: Take more hits
+      description: Adds 20 more health, so you survive longer.
       effect: 8
       op: 0
       value: 1
       cost: 10
+      costIncrement: 5
       maxRank: 5
-      tier: 2
-      prereqNodeIds:
-      - root
-      gridPos: {x: 0, y: 1}
-    - nodeId: health_2
-      displayName: +1 Health (Major)
-      description: A bigger jump in max health.
-      effect: 8
-      op: 0
-      value: 1
-      cost: 25
-      maxRank: 3
-      tier: 1
-      prereqNodeIds:
-      - health_1
-      gridPos: {x: 0, y: 2}
     - nodeId: speed_1
-      displayName: +1 Speed
-      description: Increases move speed.
+      displayName: Move faster
+      description: You walk and run 10% faster.
       effect: 9
       op: 0
       value: 1
       cost: 10
+      costIncrement: 5
       maxRank: 5
-      tier: 2
-      prereqNodeIds:
-      - root
-      gridPos: {x: 2, y: 1}
-    - nodeId: speed_2
-      displayName: +1 Speed (Major)
-      description: A bigger jump in move speed.
-      effect: 9
-      op: 0
-      value: 1
-      cost: 25
-      maxRank: 3
-      tier: 1
-      prereqNodeIds:
-      - speed_1
-      gridPos: {x: 2, y: 2}
   - skillId: whirlwind
     displayName: Whirlwind
     skillSlot: 1
     branchColor: {r: 0.35, g: 0.55, b: 0.9, a: 1}
     target: 0
+    summary: Skill 1. A spin attack that hits every enemy standing around you.
     displayBases:
     - effect: 2
       baseValue: 10
       unit: s
+    - effect: 3
+      baseValue: 3
+      unit: m
     nodes:
     - nodeId: unlock
-      displayName: Unlock
-      description: Lets you use Whirlwind, a spinning attack that hits everything
-        around you.
+      displayName: Unlock this skill
+      description: 'Lets you use Whirlwind: a spin that hits everything around you.'
       effect: 0
       op: 0
       value: 1
       cost: 20
+      costIncrement: 0
       maxRank: 1
-      tier: 0
-      prereqNodeIds: []
-      gridPos: {x: 0, y: 0}
-    - nodeId: damage_1
-      displayName: Damage +0.5x
-      description: Whirlwind hits harder.
+    - nodeId: damage
+      displayName: Hit harder
+      description: Whirlwind does more damage each time you buy this.
       effect: 1
       op: 0
       value: 0.5
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: -1, y: 1}
-    - nodeId: damage_2
-      displayName: Damage +1.0x
-      description: Whirlwind hits even harder.
-      effect: 1
-      op: 0
-      value: 1
-      cost: 35
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - damage_1
-      gridPos: {x: -1, y: 2}
-    - nodeId: area_1
-      displayName: Area +1
-      description: Whirlwind hits enemies farther away from you.
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: area
+      displayName: Reach further
+      description: Whirlwind hits enemies standing further away.
       effect: 3
       op: 0
       value: 1
       cost: 20
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 0, y: 1}
-    - nodeId: cooldown_2s
-      displayName: Cooldown -2s
-      description: Whirlwind is ready to use 2 seconds sooner.
+      costIncrement: 10
+      maxRank: 3
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 2 seconds off the wait before you can use it again.
       effect: 2
       op: 0
       value: -2
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 1, y: 1}
-    - nodeId: cooldown_3s
-      displayName: Cooldown -3s
-      description: Whirlwind is ready to use 3 more seconds sooner.
-      effect: 2
-      op: 0
-      value: -3
-      cost: 40
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - cooldown_2s
-      gridPos: {x: 1, y: 2}
-    - nodeId: mastery
-      displayName: Whirlwind Mastery
-      description: A final push of damage and area, from mastering either path.
-      effect: 1
-      op: 0
-      value: 0.5
-      cost: 50
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - damage_2
-      - area_1
-      gridPos: {x: 0, y: 3}
+      costIncrement: 15
+      maxRank: 3
   - skillId: shuriken
     displayName: Shuriken
     skillSlot: 2
     branchColor: {r: 0.65, g: 0.35, b: 0.85, a: 1}
     target: 0
+    summary: Skill 2. Throws blades that hit enemies from a distance.
     displayBases:
     - effect: 2
       baseValue: 2
@@ -216,85 +120,52 @@ MonoBehaviour:
     - effect: 1
       baseValue: 25
       unit: 
+    - effect: 6
+      baseValue: 2
+      unit: 
     nodes:
     - nodeId: unlock
-      displayName: Unlock
-      description: Lets you use Shuriken, a ranged throw that hits enemies from a
-        distance.
+      displayName: Unlock this skill
+      description: 'Lets you use Shuriken: thrown blades that hit from a distance.'
       effect: 0
       op: 0
       value: 1
       cost: 20
+      costIncrement: 0
       maxRank: 1
-      tier: 0
-      prereqNodeIds: []
-      gridPos: {x: 0, y: 0}
-    - nodeId: damage_1
-      displayName: Damage +5
-      description: Each shuriken hits harder.
+    - nodeId: damage
+      displayName: Hit harder
+      description: Each blade does 5 more damage.
       effect: 1
       op: 0
       value: 5
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: -1, y: 1}
-    - nodeId: damage_2
-      displayName: Damage +5
-      description: Each shuriken hits even harder.
-      effect: 1
-      op: 0
-      value: 5
-      cost: 30
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - damage_1
-      gridPos: {x: -1, y: 2}
-    - nodeId: count_1
-      displayName: Projectile +1
-      description: Throw one extra shuriken per use.
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: count
+      displayName: Throw one more
+      description: Throws one extra blade every time you use the skill.
       effect: 6
       op: 0
       value: 1
       cost: 30
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 1, y: 1}
-    - nodeId: cooldown_2s
-      displayName: Cooldown -2s
-      description: Shuriken is ready to use 2 seconds sooner.
+      costIncrement: 20
+      maxRank: 3
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 0.5 seconds off the wait before you can throw again.
       effect: 2
       op: 0
-      value: -2
+      value: -0.5
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 0, y: 1}
-    - nodeId: mastery
-      displayName: Shuriken Mastery
-      description: A final push of damage, from mastering either path.
-      effect: 1
-      op: 0
-      value: 10
-      cost: 45
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - damage_2
-      - count_1
-      gridPos: {x: 0, y: 2}
+      costIncrement: 15
+      maxRank: 2
   - skillId: battlecry
     displayName: Battle Cry
     skillSlot: 3
     branchColor: {r: 0.85, g: 0.3, b: 0.25, a: 1}
     target: 0
+    summary: Skill 3. A shout that makes you run much faster for a few seconds.
     displayBases:
     - effect: 2
       baseValue: 10
@@ -302,89 +173,43 @@ MonoBehaviour:
     - effect: 4
       baseValue: 5
       unit: s
+    - effect: 5
+      baseValue: 2
+      unit: x
     nodes:
     - nodeId: unlock
-      displayName: Unlock
-      description: Lets you use Battle Cry, a shout that makes you move faster for
-        a few seconds.
+      displayName: Unlock this skill
+      description: 'Lets you use Battle Cry: a shout that makes you run faster.'
       effect: 0
       op: 0
       value: 1
       cost: 20
+      costIncrement: 0
       maxRank: 1
-      tier: 0
-      prereqNodeIds: []
-      gridPos: {x: 0, y: 0}
-    - nodeId: magnitude_1
-      displayName: Magnitude +0.25x
-      description: Battle Cry makes you move even faster.
+    - nodeId: magnitude
+      displayName: Run even faster
+      description: The speed boost gets stronger.
       effect: 5
       op: 0
       value: 0.25
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: -1, y: 1}
-    - nodeId: magnitude_2
-      displayName: Magnitude +0.5x
-      description: Battle Cry makes you move a lot faster.
-      effect: 5
-      op: 0
-      value: 0.5
-      cost: 35
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - magnitude_1
-      gridPos: {x: -1, y: 2}
-    - nodeId: duration_1
-      displayName: Duration +1s
-      description: Battle Cry's speed boost lasts 1 second longer.
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: duration
+      displayName: Lasts longer
+      description: The speed boost lasts 1 second longer.
       effect: 4
       op: 0
       value: 1
       cost: 20
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 1, y: 1}
-    - nodeId: duration_2
-      displayName: Duration +2s
-      description: Battle Cry's speed boost lasts 2 more seconds.
-      effect: 4
-      op: 0
-      value: 2
-      cost: 40
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - duration_1
-      gridPos: {x: 1, y: 2}
-    - nodeId: cooldown_2s
-      displayName: Cooldown -2s
-      description: Battle Cry is ready to use 2 seconds sooner.
+      costIncrement: 10
+      maxRank: 4
+    - nodeId: cooldown
+      displayName: Ready sooner
+      description: Cuts 2 seconds off the wait before you can shout again.
       effect: 2
       op: 0
       value: -2
       cost: 15
-      maxRank: 1
-      tier: 2
-      prereqNodeIds:
-      - unlock
-      gridPos: {x: 0, y: 1}
-    - nodeId: mastery
-      displayName: Battle Cry Mastery
-      description: A final push of speed and duration, from mastering either path.
-      effect: 5
-      op: 0
-      value: 0.25
-      cost: 50
-      maxRank: 1
-      tier: 1
-      prereqNodeIds:
-      - magnitude_2
-      - duration_2
-      gridPos: {x: 0, y: 3}
+      costIncrement: 15
+      maxRank: 3

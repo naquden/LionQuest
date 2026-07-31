@@ -137,12 +137,20 @@ public class CombatController : MonoBehaviour
             return;
         }
 
-        if (radiusOverride > 0f)
+        float radius = radiusOverride > 0f ? radiusOverride : attackData.hitRadius;
+        if (radius > 0f)
         {
-            effect.SetRadius(radiusOverride);
+            effect.SetRadius(radius);
         }
 
         float baseDamage = damageOverride >= 0f ? damageOverride : attackData.damage;
+
+        // Target tag BEFORE Initialize: Initialize runs the initial overlap check, which lands the
+        // very first hit. Setting the tag afterwards meant that hit was resolved against whatever tag
+        // the effect prefab happened to be authored with, and this controller's targetTag only took
+        // effect from the second hit onward — so a mis-tagged effect prefab could damage the wrong
+        // faction and still look correctly configured on the attacker.
+        effect.SetTargetTag(targetTag);
 
         effect.Initialize(
             baseDamage * damageMultiplier,
@@ -152,7 +160,6 @@ public class CombatController : MonoBehaviour
             gameObject,
             attackData.hitWindowDuration
         );
-        effect.SetTargetTag(targetTag);
 
         if (debugCombat)
         {

@@ -15,6 +15,7 @@ public static class SkillIconGenerator
         assigned += AssignIcons<ProjectileSkillData>(UiTheme.DiamondSprite);
         assigned += AssignIcons<BattleCrySkillData>(UiTheme.RingSprite);
         assigned += AssignIcons<AttackData>(UiTheme.SquareSprite);
+        assigned += AssignIcons<LaserBeamSkillData>(UiTheme.CircleSprite);
 
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();

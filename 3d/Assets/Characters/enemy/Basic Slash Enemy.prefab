@@ -9801,6 +9801,8 @@ GameObject:
   - component: {fileID: 1173243701402730150}
   - component: {fileID: 7364936370289906279}
   - component: {fileID: 4752034024110402706}
+  - component: {fileID: 6970895915297266451}
+  - component: {fileID: 97918325979570939}
   m_Layer: 0
   m_Name: Basic Slash Enemy
   m_TagString: Untagged
@@ -14685,6 +14687,49 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
+--- !u!135 &6970895915297266451
+SphereCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5503505460791601945}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Radius: 1.85
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &97918325979570939
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5503505460791601945}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd059455469ba4f1fbd7cc0265ee19c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LionQuest.Runtime::AttackEffect
+  targetTag: Player
+  canHitMultiple: 1
+  useStayDetection: 1
+  doInitialOverlapCheck: 1
+  hitLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  debugHits: 0
+  showDebugVisual: 0
+  debugColor: {r: 1, g: 0, b: 0, a: 0.4}
 --- !u!1 &8373613166400002822
 GameObject:
   m_ObjectHideFlags: 0

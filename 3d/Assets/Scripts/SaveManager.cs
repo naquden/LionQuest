@@ -74,9 +74,32 @@ public static class SaveManager
         if (File.Exists(path))
         {
             string json = File.ReadAllText(path);
-            currentData = JsonUtility.FromJson<GameSaveData>(json);
+            try
+            {
+                currentData = JsonUtility.FromJson<GameSaveData>(json);
+            }
+            catch (System.Exception e)
+            {
+                // A save that fails to parse (truncated by a crash mid-write, hand-edited, etc.) must
+                // not silently reset progress to zero and then overwrite the only copy of it on the
+                // next save. Move the bad file aside so it survives for recovery/debugging, and start
+                // this session from a fresh save rather than crashing outright.
+                string corruptPath = path + ".corrupt";
+                try
+                {
+                    File.Copy(path, corruptPath, overwrite: true);
+                    Debug.LogError($"[SaveManager] Save file at {path} failed to parse ({e.Message}) — " +
+                                   $"backed up to {corruptPath} and starting a fresh save. Progress in the " +
+                                   "corrupt file is not lost, just not loaded automatically.");
+                }
+                catch (System.Exception backupError)
+                {
+                    Debug.LogError($"[SaveManager] Save file at {path} failed to parse ({e.Message}), and " +
+                                   $"backing it up also failed ({backupError.Message}). Starting a fresh save.");
+                }
+            }
         }
-        
+
         if (currentData == null)
         {
             currentData = new GameSaveData();
@@ -87,7 +110,32 @@ public static class SaveManager
     {
         string path = GetSavePath();
         string json = JsonUtility.ToJson(currentData, true); // true = pretty print
-        File.WriteAllText(path, json);
+
+        // Write-to-temp-then-replace: a crash/power-loss mid-write to the real path leaves a
+        // truncated, unparseable save (exactly the corrupt-file case LoadGame now has to recover
+        // from). File.Replace is atomic on both platforms this project targets (Windows/macOS via
+        // .NET's File.Replace and, on the rare filesystem where Replace itself is unsupported, the
+        // Move fallback below), so the real save file is either the old complete version or the new
+        // complete version — never a partial one.
+        string tempPath = path + ".tmp";
+        File.WriteAllText(tempPath, json);
+
+        if (File.Exists(path))
+        {
+            try
+            {
+                File.Replace(tempPath, path, null);
+            }
+            catch (System.PlatformNotSupportedException)
+            {
+                File.Delete(path);
+                File.Move(tempPath, path);
+            }
+        }
+        else
+        {
+            File.Move(tempPath, path);
+        }
         // Debug.Log($"[SaveManager] Writing to disk... Game saved to: {path}");
     }
 

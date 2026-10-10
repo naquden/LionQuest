@@ -307,7 +307,8 @@ public static class Char67Generator
 
             CharacterStats stats = Ensure<CharacterStats>(root);
             stats.characterID = CharacterID;
-            stats.souls = 0;
+            // souls/purchasedSkillNodes live in GameSaveController's shared per-character record at
+            // runtime (CharacterStats.Record), not on this component — nothing to initialize here.
             // definition stays null on the asset: PlayerSpawner assigns it per spawn, and baking
             // a reference here would be a second source of truth for the same field.
             EditorUtility.SetDirty(stats);

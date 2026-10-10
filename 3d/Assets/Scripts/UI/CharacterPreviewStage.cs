@@ -118,8 +118,23 @@ public class CharacterPreviewStage : MonoBehaviour
         nextSkillIndex = (nextSkillIndex + 1) % 3;
     }
 
+    /// <summary>
+    /// Turns the instantiated player prefab into an inert display model.
+    ///
+    /// Order matters: PlayerInput is destroyed before the rest because it claims an input device on
+    /// enable, and a preview model holding a gamepad steals it from the selection screen driving the
+    /// preview. TopDownPlayerController must go for its own reasons — it snaps its transform to
+    /// groundLevel and applies movement forces, both of which fight the anchor this model is parented
+    /// to.
+    ///
+    /// Runtime Destroy is deferred to end of frame, so these components still get one Awake/Start/
+    /// OnEnable each. That is why the controller reports its missing-MapGenerator error here and why
+    /// it is expected: it is a preview, not a player. Nothing observable survives the frame.
+    /// </summary>
     private static void StripGameplayComponents(GameObject instance)
     {
+        foreach (var input in instance.GetComponentsInChildren<UnityEngine.InputSystem.PlayerInput>(true))
+            DestroySafely(input);
         foreach (var controller in instance.GetComponentsInChildren<TopDownPlayerController>(true))
             DestroySafely(controller);
         foreach (var stats in instance.GetComponentsInChildren<CharacterStats>(true))

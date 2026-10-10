@@ -136,6 +136,67 @@ public static class AgentBatch
     }
 
     /// <summary>
+    /// Builds a real player binary. This is the ONLY gate that proves the game can ship:
+    /// AgentBatch.Compile passes even when a player build is impossible, because it compiles the
+    /// Editor assembly too (an unguarded `using UnityEditor` in Assembly-CSharp compiles fine in
+    /// the editor and fails only for the player). Test scenes are excluded here rather than in
+    /// EditorBuildSettings so the PlayMode suite can still load them.
+    /// Usage: -executeMethod AgentBatch.BuildPlayerBinary
+    /// </summary>
+    public static void BuildPlayerBinary()
+    {
+        try
+        {
+            var scenes = new System.Collections.Generic.List<string>();
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (!scene.enabled) continue;
+                // AgentGym* are PlayMode-test rigs and SampleScene is the dead binary predecessor
+                // of Level1 — none of them belong in a build handed to a player.
+                if (scene.path.Contains("AgentGym") || scene.path.Contains("SampleScene")) continue;
+                scenes.Add(scene.path);
+            }
+
+            if (scenes.Count == 0)
+            {
+                Report(FAIL, "no shippable scenes in EditorBuildSettings");
+                EditorApplication.Exit(1);
+                return;
+            }
+
+            // Build/ is gitignored; this is a throwaway artifact whose only purpose is proving the
+            // player assemblies link.
+            string outDir = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(Application.dataPath), "Build", "AgentBuildCheck");
+            System.IO.Directory.CreateDirectory(outDir);
+
+            var options = new BuildPlayerOptions
+            {
+                scenes = scenes.ToArray(),
+                locationPathName = System.IO.Path.Combine(outDir, "LionQuest.app"),
+                target = BuildTarget.StandaloneOSX,
+                options = BuildOptions.Development,
+            };
+
+            UnityEditor.Build.Reporting.BuildReport report = BuildPipeline.BuildPlayer(options);
+            UnityEditor.Build.Reporting.BuildSummary summary = report.summary;
+            if (summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
+            {
+                Report(FAIL, $"player build {summary.result} with {summary.totalErrors} error(s)");
+                EditorApplication.Exit(1);
+                return;
+            }
+
+            Report(OK, $"player build succeeded, {scenes.Count} scene(s), {summary.totalSize} bytes");
+        }
+        catch (Exception e)
+        {
+            Report(FAIL, e.ToString());
+            EditorApplication.Exit(1);
+        }
+    }
+
+    /// <summary>
     /// Prints environment facts an agent cannot get from disk.
     /// Usage: -executeMethod AgentBatch.Diagnose
     /// </summary>

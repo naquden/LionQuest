@@ -58,6 +58,8 @@ public class PlayerHUDPanel : MonoBehaviour
         {
             boundPlayer.OnHealthChanged += HandleHealthChanged;
             boundPlayer.OnDeath += HandleDeath;
+            boundPlayer.OnDowned += HandleDeath; // same greyed-out visual; downed is not yet distinguishable from dead on the HUD.
+            boundPlayer.OnRevived += HandleRevived;
             HandleHealthChanged(boundPlayer.CurrentHealth, boundPlayer.MaxHealth);
         }
 
@@ -80,6 +82,8 @@ public class PlayerHUDPanel : MonoBehaviour
         {
             boundPlayer.OnHealthChanged -= HandleHealthChanged;
             boundPlayer.OnDeath -= HandleDeath;
+            boundPlayer.OnDowned -= HandleDeath;
+            boundPlayer.OnRevived -= HandleRevived;
             boundPlayer = null;
         }
 
@@ -243,6 +247,18 @@ public class PlayerHUDPanel : MonoBehaviour
             healthText.text = $"0 / {max}";
         }
         if (portraitImage != null) portraitImage.color = new Color(0.4f, 0.4f, 0.4f, 1f);
+    }
+
+    /// <summary>
+    /// TopDownPlayerController.Revive already raises OnHealthChanged with a positive value, which
+    /// would re-whiten the portrait on its own via HandleHealthChanged. This handler exists anyway so
+    /// "the player came back" is an explicit reaction to OnRevived rather than an incidental side
+    /// effect of the new health happening to be positive — the two events mean different things even
+    /// though today they'd produce the same portrait colour.
+    /// </summary>
+    private void HandleRevived()
+    {
+        if (portraitImage != null) portraitImage.color = Color.white;
     }
 
     private void HandleSoulsChanged(int souls)

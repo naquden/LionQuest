@@ -75,7 +75,16 @@ public class SkillTreeScreenController : MonoBehaviour
     public void Open(CharacterDefinition character, System.Action onCloseCallback)
     {
         definition = character;
-        save = SaveManager.LoadCharacter(character.characterID);
+        // Routed through GameSaveController when it exists (DontDestroyOnLoad, so it survives the
+        // Level1 <-> CharacterSelection round trip) rather than SaveManager.LoadCharacter directly.
+        // GameSaveController caches one CharacterSaveData per characterID for the whole session
+        // (CharacterStats reads/writes the same cached object) — loading straight from SaveManager
+        // here would hand this screen a SEPARATE object, so a purchase made here would write to disk
+        // correctly but leave the cached object CharacterStats reads on the next Level1 load stale,
+        // silently reverting to whatever it held before this purchase.
+        save = GameSaveController.Instance != null
+            ? GameSaveController.Instance.GetSharedRecord(character.characterID)
+            : SaveManager.LoadCharacter(character.characterID);
         onClose = onCloseCallback;
         categoryIndex = 0;
         rowIndex = 0;
@@ -189,7 +198,11 @@ public class SkillTreeScreenController : MonoBehaviour
 
         if (!SkillTreeService.TryPurchase(definition, save, CurrentCategory.skillId, row.nodeId)) return;
 
-        SaveManager.SaveCharacter(save);
+        // FlushCharacter when GameSaveController owns `save` (the normal case — see Open), so this
+        // writes through the same single-writer path CharacterStats.TryPurchaseNode uses. Falls back
+        // to a direct save only in the no-GameSaveController case Open also falls back for.
+        if (GameSaveController.Instance != null) GameSaveController.Instance.FlushCharacter(save.characterID);
+        else SaveManager.SaveCharacter(save);
         Refresh();
     }
 

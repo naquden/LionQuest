@@ -71,6 +71,8 @@ public static class PauseMenuGenerator
         Button characterSelectionButton = CreateButton(menuPanel, "CharacterSelectionButton", "Character Selection");
         Button exitButton = CreateButton(menuPanel, "ExitButton", "Exit");
 
+        BuildVolumeSliders(menuPanel);
+
         WireNavigation(resumeButton, retryButton, characterSelectionButton, exitButton);
 
         InputActionAssetWireInto(root, panel, title, resumeButton, retryButton, characterSelectionButton, exitButton);
@@ -142,6 +144,31 @@ public static class PauseMenuGenerator
         layoutElement.preferredHeight = 90;
 
         return button;
+    }
+
+    /// <summary>Master/Music/SFX rows below the buttons — this menu is the one screen guaranteed
+    /// present in every gameplay scene, so it is where volume lives until a dedicated settings
+    /// screen exists.</summary>
+    static void BuildVolumeSliders(Transform parent)
+    {
+        Slider master = UiTheme.LabelledSlider(parent, "MasterVolumeRow", "Master", new Vector2(360, 44));
+        Slider music = UiTheme.LabelledSlider(parent, "MusicVolumeRow", "Music", new Vector2(360, 44));
+        Slider sfx = UiTheme.LabelledSlider(parent, "SfxVolumeRow", "SFX", new Vector2(360, 44));
+
+        foreach (Slider slider in new[] { master, music, sfx })
+        {
+            var layoutElement = slider.gameObject.transform.parent.gameObject.AddComponent<LayoutElement>();
+            layoutElement.minHeight = 44;
+            layoutElement.preferredHeight = 44;
+        }
+
+        var panelGo = parent.gameObject; // MenuPanel itself — VolumeSlidersPanel just needs the 3 slider refs, no new hierarchy.
+        var panel = panelGo.AddComponent<VolumeSlidersPanel>();
+        var so = new SerializedObject(panel);
+        so.FindProperty("masterSlider").objectReferenceValue = master;
+        so.FindProperty("musicSlider").objectReferenceValue = music;
+        so.FindProperty("sfxSlider").objectReferenceValue = sfx;
+        so.ApplyModifiedProperties();
     }
 
     /// <summary>

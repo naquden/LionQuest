@@ -339,6 +339,18 @@ public static class StartScreenGenerator
             worldPos.y = terrain.SampleHeight(worldPos) + terrain.transform.position.y;
 
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[i]);
+
+            // Unpacked before stripping, and completely (not one level). A component that a prefab
+            // instance inherits cannot be destroyed while the link exists — Unity refuses and the
+            // DestroyImmediate calls below silently no-op. 67 is a prefab *variant*, so its
+            // TopDownPlayerController came from the nested base and survived every strip: the start
+            // screen shipped a live player controller running input, physics and its ground snap
+            // (which drags the showcase character off the island's surface down to y = 0) behind the
+            // menu. AssasinoCappuchino is a plain prefab, so its strip worked and the difference went
+            // unnoticed. These are decorative props; nothing needs the prefab link.
+            PrefabUtility.UnpackPrefabInstance(instance, PrefabUnpackMode.Completely,
+                InteractionMode.AutomatedAction);
+
             instance.transform.position = worldPos;
             instance.transform.rotation = Quaternion.LookRotation(terrainCenter - worldPos, Vector3.up);
 
@@ -351,6 +363,13 @@ public static class StartScreenGenerator
         return showcased.ToArray();
     }
 
+    /// <summary>
+    /// Removes everything that makes a character a *player* rather than a prop. Requires the instance
+    /// to have been unpacked first — see the note at the call site.
+    ///
+    /// PlayerInput goes too: a diorama character that keeps it claims a device out of the pool, so a
+    /// gamepad could end up paired to a background prop instead of the menu.
+    /// </summary>
     static void StripGameplayComponents(GameObject instance)
     {
         foreach (var controller in instance.GetComponentsInChildren<TopDownPlayerController>(true))
@@ -359,8 +378,18 @@ public static class StartScreenGenerator
             Object.DestroyImmediate(stats);
         foreach (var combat in instance.GetComponentsInChildren<CombatController>(true))
             Object.DestroyImmediate(combat);
+        foreach (var input in instance.GetComponentsInChildren<UnityEngine.InputSystem.PlayerInput>(true))
+            Object.DestroyImmediate(input);
         foreach (var rb in instance.GetComponentsInChildren<Rigidbody>(true))
             rb.isKinematic = true;
+
+        // Fail loudly rather than shipping a live player behind the menu again.
+        if (instance.GetComponentInChildren<TopDownPlayerController>(true) != null)
+        {
+            Debug.LogError($"StartScreenGenerator: could not strip TopDownPlayerController from " +
+                           $"'{instance.name}' — it is still a prefab instance. The start screen would " +
+                           "run a live player controller behind the menu.");
+        }
     }
 
     static void BuildDiorama(Camera camera, Terrain terrain, CharacterAnimator[] characters)

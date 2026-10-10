@@ -49,12 +49,16 @@ public static class Level1Generator
     // on y. Without that, spawn points near the origin would land in the ocean corner, and
     // TopDownPlayerController.Awake (which force-clamps spawn y to groundLevel = 0) would drop the
     // player under the terrain.
-    const int MapSize = 120;
-    const float TerrainHeight = 20f;
-    const float IslandRadius = 34f;
-    const float OceanDepth = 6f;
-    const float HeightAmplitude = 3.5f;
-    const float BeachWidth = 7f;
+    const int MapSize = 280;
+    const float TerrainHeight = 24f;
+    const float IslandRadius = 85f;
+    const float OceanDepth = 8f;
+    const float HeightAmplitude = 4f;
+    const float BeachWidth = 10f;
+    const int HeightmapResolution = 1025;
+
+    const string RegionDir = "Assets/Data/Regions";
+    const string ArchetypeDir = "Assets/Data/EnemyArchetypes";
 
     static Vector3 TerrainOrigin =>
         new Vector3(-MapSize * 0.5f, -(OceanDepth + HeightAmplitude), -MapSize * 0.5f);
@@ -66,10 +70,12 @@ public static class Level1Generator
 
         BuildLighting();
         BuildVolume();
-        MapGenerator mapGenerator = BuildTerrain();
+        RegionDefinition[] regions = BuildRegions();
+        MapGenerator mapGenerator = BuildTerrain(regions);
         Transform[] spawnPoints = BuildSpawnPoints();
         TopDownCameraController followCamera = BuildCamera();
-        SpawnEnemies();
+        Transform openingWaveParent = SpawnEnemies();
+        BuildWaveSpawner(openingWaveParent, mapGenerator, regions);
 
         GameObject gameControllerPrefab = Load<GameObject>(GameControllerPrefabPath);
         if (gameControllerPrefab != null)
@@ -127,12 +133,93 @@ public static class Level1Generator
     }
 
     /// <summary>
+    /// Idempotent load-or-create of the 5 difficulty-band RegionDefinition assets, so re-running
+    /// this generator always converges every field back to these locked values rather than drifting
+    /// from whatever an earlier iteration or manual Inspector edit left behind. eligibleArchetypes
+    /// entries are loaded from Assets/Data/EnemyArchetypes — if 'LionQuest/Generate/Enemy Archetypes'
+    /// hasn't run yet, those slots stay empty and restrictArchetypes silently excludes everything
+    /// for that region until it's re-run.
+    /// </summary>
+    static RegionDefinition[] BuildRegions()
+    {
+        UiTheme.EnsureFolder(RegionDir);
+
+        var rangedArchetype = AssetDatabase.LoadAssetAtPath<EnemyArchetype>($"{ArchetypeDir}/Ranged.asset");
+        var eliteArchetype = AssetDatabase.LoadAssetAtPath<EnemyArchetype>($"{ArchetypeDir}/Elite.asset");
+        var bossArchetype = AssetDatabase.LoadAssetAtPath<EnemyArchetype>($"{ArchetypeDir}/Boss.asset");
+
+        var specs = new[]
+        {
+            new RegionSpec("StartMeadow", "Start Meadow", 0.00f, 0.20f, 1.0f, 1.0f, false, null),
+            new RegionSpec("Wildwood", "Wildwood", 0.20f, 0.42f, 1.3f, 1.0f, false, null),
+            new RegionSpec("AshenFlats", "Ashen Flats", 0.42f, 0.65f, 1.6f, 1.3f, false, null),
+            new RegionSpec("ShatteredReach", "Shattered Reach", 0.65f, 0.85f, 2.0f, 1.6f, true,
+                new[] { rangedArchetype, eliteArchetype, bossArchetype }),
+            new RegionSpec("TheMaw", "The Maw", 0.85f, 1.00f, 2.5f, 2.0f, true,
+                new[] { eliteArchetype, bossArchetype }),
+        };
+
+        var result = new RegionDefinition[specs.Length];
+        for (int i = 0; i < specs.Length; i++)
+        {
+            string path = $"{RegionDir}/{specs[i].fileName}.asset";
+            var region = AssetDatabase.LoadAssetAtPath<RegionDefinition>(path);
+            if (region == null)
+            {
+                region = ScriptableObject.CreateInstance<RegionDefinition>();
+                AssetDatabase.CreateAsset(region, path);
+            }
+
+            region.regionName = specs[i].displayName;
+            region.minFraction = specs[i].minFraction;
+            region.maxFraction = specs[i].maxFraction;
+            region.densityMultiplier = specs[i].density;
+            region.holeDensityMultiplier = specs[i].holeDensity;
+            region.restrictArchetypes = specs[i].restrict;
+            region.eligibleArchetypes = specs[i].restrict
+                ? System.Array.FindAll(specs[i].archetypes, a => a != null)
+                : System.Array.Empty<EnemyArchetype>();
+
+            EditorUtility.SetDirty(region);
+            result[i] = region;
+        }
+
+        AssetDatabase.SaveAssets();
+        return result;
+    }
+
+    struct RegionSpec
+    {
+        public string fileName;
+        public string displayName;
+        public float minFraction;
+        public float maxFraction;
+        public float density;
+        public float holeDensity;
+        public bool restrict;
+        public EnemyArchetype[] archetypes;
+
+        public RegionSpec(string fileName, string displayName, float minFraction, float maxFraction,
+            float density, float holeDensity, bool restrict, EnemyArchetype[] archetypes)
+        {
+            this.fileName = fileName;
+            this.displayName = displayName;
+            this.minFraction = minFraction;
+            this.maxFraction = maxFraction;
+            this.density = density;
+            this.holeDensity = holeDensity;
+            this.restrict = restrict;
+            this.archetypes = archetypes;
+        }
+    }
+
+    /// <summary>
     /// Procedural island terrain. Its TerrainData is a dedicated asset (not SampleScene's) so
     /// regenerating Level1 can never corrupt another scene's terrain, and generation runs here at
     /// edit time with generateOnStart left ON — MapGenerator.Awake regenerates at runtime, which
-    /// keeps the scene file free of a baked 120x120 heightmap blob.
+    /// keeps the scene file free of a baked 280x280 heightmap blob.
     /// </summary>
-    static MapGenerator BuildTerrain()
+    static MapGenerator BuildTerrain(RegionDefinition[] regions)
     {
         TerrainData terrainData = Load<TerrainData>(TerrainDataPath);
         if (terrainData == null)
@@ -140,6 +227,10 @@ public static class Level1Generator
             terrainData = new TerrainData();
             AssetDatabase.CreateAsset(terrainData, TerrainDataPath);
         }
+
+        // Must be set before terrainData.size (inside GenerateMap) — Unity resamples the heightmap
+        // to whatever resolution is current at the time size is assigned.
+        terrainData.heightmapResolution = HeightmapResolution;
 
         var terrainGo = new GameObject("Terrain", typeof(Terrain), typeof(TerrainCollider), typeof(MapGenerator));
         terrainGo.transform.position = TerrainOrigin;
@@ -169,6 +260,13 @@ public static class Level1Generator
         // Shallower than the waterline drop, or the water quad renders inside the pit.
         so.FindProperty("holeDepth").floatValue = 1.2f;
         so.FindProperty("generateOnStart").boolValue = true;
+
+        var regionsProp = so.FindProperty("regions");
+        regionsProp.arraySize = regions.Length;
+        for (int i = 0; i < regions.Length; i++)
+        {
+            regionsProp.GetArrayElementAtIndex(i).objectReferenceValue = regions[i];
+        }
 
         so.FindProperty("terrainMaterial").objectReferenceValue = Load<Material>($"{ShaderDir}/StylizedTerrain.mat");
         so.FindProperty("waterMaterial").objectReferenceValue = Load<Material>($"{ShaderDir}/StylizedWater.mat");
@@ -234,7 +332,11 @@ public static class Level1Generator
     /// </summary>
     static TopDownCameraController BuildCamera()
     {
-        var cameraGo = new GameObject("Main Camera", typeof(Camera), typeof(TopDownCameraController));
+        // AudioListener belongs on the one shared camera, not on players: four listeners in a
+        // local-coop scene makes Unity pick one arbitrarily and warn, and no listener at all
+        // (the previous state) makes every sound silent no matter how it is played.
+        var cameraGo = new GameObject("Main Camera",
+            typeof(Camera), typeof(TopDownCameraController), typeof(AudioListener));
         cameraGo.tag = "MainCamera";
 
         Camera camera = cameraGo.GetComponent<Camera>();
@@ -259,7 +361,11 @@ public static class Level1Generator
         so.FindProperty("minPlayerDistance").floatValue = 0f;
         so.FindProperty("maxPlayerDistance").floatValue = 24f;
         so.FindProperty("distanceMultiplier").floatValue = 0.5f;
-        so.FindProperty("lookAtOffset").vector3Value = new Vector3(0f, 1.5f, 0f);
+        // Four players can end up on opposite sides of the 90-unit playable radius, far beyond the
+        // 24-unit comfort spread. The ceiling is what actually decides whether the straggler is on
+        // screen at all; sized to frame the island's full playable width (same ratio to playable
+        // radius as before the region rescale: ~2.4x).
+        so.FindProperty("maxCameraDistance").floatValue = 216f;
         so.ApplyModifiedProperties();
 
         // Pre-place it exactly where LateUpdate solves for a target at the origin, so the first
@@ -287,21 +393,31 @@ public static class Level1Generator
     /// unlock, so clearing the level funds exactly one new skill with a little to spare. Each ring is
     /// offset half a step so they don't line up radially.
     /// </summary>
-    static void SpawnEnemies()
+    /// <returns>The "Enemies" parent transform, so WaveSpawner can watch it for wave-1 clearance —
+    /// see BuildWaveSpawner.</returns>
+    static Transform SpawnEnemies()
     {
         GameObject enemyPrefab = Load<GameObject>(EnemyPrefabPath);
         if (enemyPrefab == null)
         {
             Debug.LogError($"Level1Generator: {EnemyPrefabPath} missing — Level1 will have no enemies.");
-            return;
+            return null;
         }
 
         var parent = new GameObject("Enemies").transform;
 
-        // Every ring stays inside islandRadius (34) minus the beach (7), so no enemy stands in surf.
+        // Ring radii are unchanged from the original 120-unit map: they only need to clear
+        // Enemy.pullRange (15u) so the player isn't swarmed the instant they spawn, which has
+        // nothing to do with IslandRadius or region bands — the opening wave is hand-placed and
+        // does not consult MapGenerator.GetRegionAt at all. All three land inside Start Meadow's
+        // 0.00-0.20 band anyway (< 18u of the new GetPlayableRadius()=90) except the outermost
+        // ring, which spills slightly into Wildwood — harmless, since region membership only
+        // matters to WaveSpawner's spawned waves, not this hand-placed one.
         SpawnEnemyRing(enemyPrefab, parent, count: 6, radius: 16f, angleOffset: 0f, nameOffset: 0);
         SpawnEnemyRing(enemyPrefab, parent, count: 8, radius: 20f, angleOffset: Mathf.PI / 8f, nameOffset: 6);
         SpawnEnemyRing(enemyPrefab, parent, count: 10, radius: 24f, angleOffset: Mathf.PI / 10f, nameOffset: 14);
+
+        return parent;
     }
 
     static void SpawnEnemyRing(GameObject enemyPrefab, Transform parent, int count, float radius,
@@ -319,6 +435,32 @@ public static class Level1Generator
             // Face the island centre so the first frame doesn't show them all aligned to +z.
             enemy.transform.rotation = Quaternion.LookRotation(-position.normalized, Vector3.up);
         }
+    }
+
+    /// <summary>
+    /// Creates the WaveSpawner that takes over once the hand-placed opening wave (openingWaveParent)
+    /// is cleared. Its archetype tables (archetypes/bossArchetypes) are left empty here — run
+    /// 'LionQuest/Generate/Enemy Archetypes' after this to fill them in, since that generator owns
+    /// building the archetype prefabs/assets this one has no reason to know about. Re-running Level 1
+    /// alone (e.g. to pick up a terrain change) does not need archetypes rebuilt, which is why the
+    /// two stay separate generators rather than one doing both.
+    /// </summary>
+    static void BuildWaveSpawner(Transform openingWaveParent, MapGenerator mapGenerator, RegionDefinition[] regions)
+    {
+        var spawnerGo = new GameObject("WaveSpawner", typeof(WaveSpawner));
+        var spawner = spawnerGo.GetComponent<WaveSpawner>();
+        var so = new SerializedObject(spawner);
+        so.FindProperty("openingWaveParent").objectReferenceValue = openingWaveParent;
+        so.FindProperty("mapGenerator").objectReferenceValue = mapGenerator;
+
+        var regionsProp = so.FindProperty("regions");
+        regionsProp.arraySize = regions.Length;
+        for (int i = 0; i < regions.Length; i++)
+        {
+            regionsProp.GetArrayElementAtIndex(i).objectReferenceValue = regions[i];
+        }
+
+        so.ApplyModifiedProperties();
     }
 
     static void BuildSpawner(Transform[] spawnPoints, PlayerHUD hud, PauseMenuController pauseMenu,
@@ -360,6 +502,9 @@ public static class Level1Generator
         so.FindProperty("hud").objectReferenceValue = hud;
         so.FindProperty("pauseMenu").objectReferenceValue = pauseMenu;
         so.FindProperty("followCamera").objectReferenceValue = followCamera;
+        // Each spawned player gets this via SetMapGenerator — the prefab cannot hold a scene ref and
+        // the controller is not allowed to search for one.
+        so.FindProperty("mapGenerator").objectReferenceValue = mapGenerator;
         so.ApplyModifiedProperties();
 
         if (mapGenerator == null)

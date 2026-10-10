@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &9044769645345895668
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: maxHealth
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: pullRange
+      value: 18
+      objectReference: {fileID: 0}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: attackData
+      value: 
+      objectReference: {fileID: 11400000, guid: e07d29bf34a204fd0b99a3577c8bdd4a, type: 2}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: stopDistance
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: attackCooldown
+      value: 1.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: rangedProjectileSpeed
+      value: 14
+      objectReference: {fileID: 0}
+    - target: {fileID: 3601642964484864438, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: rangedProjectilePrefab
+      value: 
+      objectReference: {fileID: 916733502433444296, guid: e99ada595822c4adca68d6ed1f543dca, type: 3}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 4.73
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.38
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 5.88
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.24513647
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.9694886
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: -151.62
+      objectReference: {fileID: 0}
+    - target: {fileID: 4754951633341321629, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5383820248657513255, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}
+      propertyPath: m_Name
+      value: Enemy Ranged
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: eef4e75b7fa4f4c58b2e9a5952c39b10, type: 3}

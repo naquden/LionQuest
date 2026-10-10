@@ -10,10 +10,12 @@ using UnityEngine.UI;
 /// Lives on PauseMenuCanvas.prefab in the gameplay scenes. Freezes time and switches every
 /// registered player's PlayerInput to the UI map while open, so gameplay input can't leak through.
 ///
-/// Doubles as the game-over screen: the same panel, retitled, with Resume swapped for Retry. Death
-/// used to be invisible outside the HUD — TopDownPlayerController.Die fired OnDeath, the portrait
-/// greyed out and the health text read "0 / 0", but the run carried on with a corpse the player
-/// could still walk around. This is the thing that listens.
+/// Doubles as the game-over AND victory screen: the same panel, retitled, with Resume swapped for
+/// Retry. Death used to be invisible outside the HUD — TopDownPlayerController.Die fired OnDeath,
+/// the portrait greyed out and the health text read "0 / 0", but the run carried on with a corpse
+/// the player could still walk around. This is the thing that listens. Victory (WaveSpawner's boss
+/// dying) is a third, mutually exclusive terminal state layered onto the same mechanism rather than
+/// a separate canvas — see IsVictory/ShowVictory/ShowTerminalScreen.
 /// </summary>
 public class PauseMenuController : MonoBehaviour
 {
@@ -30,16 +32,32 @@ public class PauseMenuController : MonoBehaviour
 
     const string PausedTitle = "Paused";
     const string GameOverTitle = "Game Over";
+    const string VictoryTitle = "Victory!";
+    const string DeviceLostTitle = "Controller Disconnected";
 
     private InputAction cancelAction;
     private readonly List<PlayerInput> registeredPlayers = new List<PlayerInput>();
     private readonly List<TopDownPlayerController> trackedPlayers = new List<TopDownPlayerController>();
+
+    /// <summary>How many registered players currently have a lost device. &gt;0 means the game must
+    /// stay paused regardless of how it got here — Resume must not hand control back to a player
+    /// whose gamepad is still disconnected.</summary>
+    private int lostDeviceCount;
 
     public bool IsOpen { get; private set; }
 
     /// <summary>True once every registered player is dead. Terminal for this scene load — the only
     /// ways out are Retry, Character Selection and Exit, all of which leave or reload the scene.</summary>
     public bool IsGameOver { get; private set; }
+
+    /// <summary>True once the run has been won (WaveSpawner's boss died). Terminal in the same sense
+    /// as IsGameOver — mutually exclusive with it, since a dead party cannot also have won.</summary>
+    public bool IsVictory { get; private set; }
+
+    /// <summary>Either terminal state. Named separately from IsGameOver/IsVictory rather than
+    /// computed inline at each call site, so the logic for "the run has ended, one way or the
+    /// other" lives in exactly one place.</summary>
+    private bool IsRunOver => IsGameOver || IsVictory;
 
     private void Awake()
     {
@@ -78,6 +96,13 @@ public class PauseMenuController : MonoBehaviour
         }
         trackedPlayers.Clear();
 
+        foreach (PlayerInput playerInput in registeredPlayers)
+        {
+            if (playerInput == null) continue;
+            playerInput.onDeviceLost -= HandleDeviceLost;
+            playerInput.onDeviceRegained -= HandleDeviceRegained;
+        }
+
         cancelAction?.Disable();
 
         if (Instance == this) Instance = null;
@@ -87,9 +112,9 @@ public class PauseMenuController : MonoBehaviour
     {
         if (!IsOpen) return;
 
-        // Cancel closes the pause menu, but must not dismiss game over — there is nothing to
-        // resume to, and closing it would hand the player back a dead body and a live HUD.
-        if (!IsGameOver && cancelAction != null && cancelAction.WasPressedThisFrame())
+        // Cancel closes the pause menu, but must not dismiss a terminal screen — there is nothing to
+        // resume to, and closing it would hand the player back a dead (or already-won) run.
+        if (!IsRunOver && cancelAction != null && cancelAction.WasPressedThisFrame())
         {
             Resume();
         }
@@ -108,6 +133,12 @@ public class PauseMenuController : MonoBehaviour
         if (!registeredPlayers.Contains(playerInput))
         {
             registeredPlayers.Add(playerInput);
+            // PlayerInput.onDeviceLost only fires when m_NotificationBehavior is set to
+            // InvokeCSharpEvents on the prefab (both AssCap and 67 have this) — without it, a
+            // disconnected gamepad mid-run left that player's controller silently idle while
+            // enemies kept attacking it, with nothing on screen explaining why.
+            playerInput.onDeviceLost += HandleDeviceLost;
+            playerInput.onDeviceRegained += HandleDeviceRegained;
         }
     }
 
@@ -133,10 +164,42 @@ public class PauseMenuController : MonoBehaviour
     public void Toggle()
     {
         // Pausing a finished run would swap the title back to "Paused" and re-offer Resume.
-        if (IsGameOver) return;
+        if (IsRunOver) return;
 
         if (IsOpen) Resume();
         else Open();
+    }
+
+    /// <summary>
+    /// A registered player's device disconnected mid-run. Pauses immediately rather than leaving
+    /// that player idle while enemies keep attacking a body nobody can move — the same problem
+    /// permanent death solves for a dead player, but for a merely-unplugged one.
+    /// </summary>
+    private void HandleDeviceLost(PlayerInput playerInput)
+    {
+        lostDeviceCount++;
+        if (IsRunOver) return; // nothing to pause — the run already ended.
+
+        if (!IsOpen) Open();
+
+        // Open() always sets the "Paused" title; overwrite it after, whether this call opened the
+        // panel or it was already open for another reason (a second player hit Pause) — either way
+        // "Paused" alone would hide that a controller is unplugged.
+        if (titleText != null) titleText.text = DeviceLostTitle;
+    }
+
+    /// <summary>
+    /// A previously lost device reconnected. Does not auto-resume: the player should confirm they
+    /// are ready (same Resume button as a manual pause), and — with more than one player — another
+    /// device may still be disconnected, which lostDeviceCount tracks across all registered players.
+    /// </summary>
+    private void HandleDeviceRegained(PlayerInput playerInput)
+    {
+        lostDeviceCount = Mathf.Max(0, lostDeviceCount - 1);
+        if (IsOpen && !IsRunOver && titleText != null)
+        {
+            titleText.text = lostDeviceCount > 0 ? DeviceLostTitle : PausedTitle;
+        }
     }
 
     /// <summary>
@@ -145,7 +208,9 @@ public class PauseMenuController : MonoBehaviour
     /// </summary>
     private void HandlePlayerDeath()
     {
-        if (IsGameOver) return;
+        // Also guards against a death arriving after victory — e.g. the boss's own attack lands the
+        // same frame it dies. The run already ended; game over must not overwrite a win.
+        if (IsRunOver) return;
 
         foreach (TopDownPlayerController player in trackedPlayers)
         {
@@ -156,22 +221,45 @@ public class PauseMenuController : MonoBehaviour
         ShowGameOver();
     }
 
-    /// <summary>Ends the run: same frozen, input-locked panel as pause, retitled, Resume replaced by
-    /// Retry. Public so a scene or test can end the run without killing every player by hand.</summary>
+    /// <summary>Ends the run in defeat: same frozen, input-locked panel as pause, retitled, Resume
+    /// replaced by Retry. Public so a scene or test can end the run without killing every player by
+    /// hand.</summary>
     public void ShowGameOver()
+    {
+        if (IsRunOver) return; // victory already showing — a death cannot downgrade a win.
+        IsGameOver = true;
+        if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("GameOver");
+        ShowTerminalScreen(GameOverTitle);
+    }
+
+    /// <summary>Ends the run in victory: WaveSpawner calls this when its boss wave's Enemy dies.
+    /// Same shared panel and Retry-to-play-again flow as game over — see the class doc comment on
+    /// why a third mutually-exclusive terminal state reuses this panel rather than getting its own
+    /// canvas.</summary>
+    public void ShowVictory()
+    {
+        if (IsRunOver) return;
+        IsVictory = true;
+        if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("Victory");
+        ShowTerminalScreen(VictoryTitle);
+    }
+
+    /// <summary>Shared body of ShowGameOver/ShowVictory: retitle, swap Resume for Retry, freeze time,
+    /// lock input, save, and focus. The two callers differ only in which bool they set and which
+    /// title they pass — everything about presenting a terminal screen is identical either way.</summary>
+    private void ShowTerminalScreen(string title)
     {
         if (panel == null)
         {
-            Debug.LogError("PauseMenuController: panel is not assigned — the player died and nothing can be shown!");
+            Debug.LogError("PauseMenuController: panel is not assigned — the run ended and nothing can be shown!");
             return;
         }
 
-        IsGameOver = true;
         IsOpen = true;
         panel.SetActive(true);
 
-        if (titleText != null) titleText.text = GameOverTitle;
-        else Debug.LogError("PauseMenuController: titleText is not assigned — the game-over panel will still read 'Paused'.");
+        if (titleText != null) titleText.text = title;
+        else Debug.LogError("PauseMenuController: titleText is not assigned — the panel will still read 'Paused'.");
 
         if (resumeButton != null) resumeButton.gameObject.SetActive(false);
         if (retryButton != null) retryButton.gameObject.SetActive(true);
@@ -189,7 +277,7 @@ public class PauseMenuController : MonoBehaviour
         Time.timeScale = 0f;
         SetPlayerActionMap("UI");
 
-        // Souls earned before dying are kept — the run is lost, the progression is not.
+        // Souls earned before the run ended are kept either way — win or lose, progression sticks.
         if (GameSaveController.Instance != null)
         {
             GameSaveController.Instance.SaveAllActivePlayers();
@@ -224,9 +312,14 @@ public class PauseMenuController : MonoBehaviour
 
     private void Resume()
     {
-        // Defensive: Resume is hidden on game over, but a stale click/navigation event must not
-        // un-freeze a finished run.
-        if (IsGameOver) return;
+        // Defensive: Resume is hidden on any terminal screen, but a stale click/navigation event
+        // must not un-freeze a finished run.
+        if (IsRunOver) return;
+
+        // A player whose controller is still disconnected cannot ever press anything to un-pause,
+        // so resuming here would just be everyone else abandoning them mid-fight. Held closed until
+        // HandleDeviceRegained clears the last lost device.
+        if (lostDeviceCount > 0) return;
 
         IsOpen = false;
         if (panel != null) panel.SetActive(false);

@@ -154,7 +154,10 @@ public static class EnemyCombatGenerator
                 so.FindProperty("attackData").objectReferenceValue = attackData;
                 so.FindProperty("stopDistance").floatValue = EnemyStopDistance;
                 so.FindProperty("attackCooldown").floatValue = EnemyAttackCooldown;
-                so.FindProperty("playerTag").stringValue = PlayerTag;
+                // No playerTag any more — Enemy targets through GameSaveController's player registry
+                // instead of a tag lookup, so it can pick the *nearest* living player and retarget when
+                // that one dies. PlayerTag below is still used for CombatController's hit filtering,
+                // which is a physics-layer concern rather than a "who do I chase" one.
                 so.ApplyModifiedProperties();
             }
 

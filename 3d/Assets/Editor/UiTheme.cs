@@ -379,7 +379,10 @@ public static class UiTheme
 
     public static Button Button(Transform parent, string name, string label, Vector2 size)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        // UiClickSound added here so every button any generator builds through this one factory
+        // gets a click SFX automatically — one place to opt every screen in, rather than adding the
+        // component at each of the many CreateButton call sites across the generators.
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button), typeof(UiClickSound));
         go.transform.SetParent(parent, false);
         go.GetComponent<RectTransform>().sizeDelta = size;
 
@@ -395,6 +398,83 @@ public static class UiTheme
         StretchFull((RectTransform)text.transform);
 
         return button;
+    }
+
+    /// <summary>
+    /// A labelled 0..1 slider: "Master" text to the left, the slider itself filling the rest of the
+    /// row. Background/fill/handle built from the same sprites as everything else UiTheme makes, so
+    /// a volume row reads as part of the same UI rather than a default-uGUI-grey slider dropped in.
+    /// </summary>
+    public static Slider LabelledSlider(Transform parent, string name, string label, Vector2 size)
+    {
+        var rowGo = new GameObject(name, typeof(RectTransform));
+        rowGo.transform.SetParent(parent, false);
+        rowGo.GetComponent<RectTransform>().sizeDelta = size;
+
+        TMP_Text labelText = Text(rowGo.transform, "Label", label, 22, TextAlignmentOptions.MidlineLeft, TextLight, FontStyles.Bold);
+        var labelRect = (RectTransform)labelText.transform;
+        labelRect.anchorMin = new Vector2(0f, 0f);
+        labelRect.anchorMax = new Vector2(0.32f, 1f);
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        var sliderGo = new GameObject("Slider", typeof(RectTransform), typeof(Slider));
+        sliderGo.transform.SetParent(rowGo.transform, false);
+        var sliderRect = (RectTransform)sliderGo.transform;
+        sliderRect.anchorMin = new Vector2(0.36f, 0f);
+        sliderRect.anchorMax = new Vector2(1f, 1f);
+        sliderRect.offsetMin = Vector2.zero;
+        sliderRect.offsetMax = Vector2.zero;
+
+        var bgGo = new GameObject("Background", typeof(RectTransform), typeof(Image));
+        bgGo.transform.SetParent(sliderGo.transform, false);
+        var bgRect = (RectTransform)bgGo.transform;
+        bgRect.anchorMin = new Vector2(0f, 0.25f);
+        bgRect.anchorMax = new Vector2(1f, 0.75f);
+        bgRect.offsetMin = Vector2.zero;
+        bgRect.offsetMax = Vector2.zero;
+        Image bgImage = bgGo.GetComponent<Image>();
+        bgImage.sprite = PillFillSprite;
+        bgImage.type = Image.Type.Sliced;
+        bgImage.color = SurfaceInset;
+
+        var fillAreaGo = new GameObject("Fill Area", typeof(RectTransform));
+        fillAreaGo.transform.SetParent(sliderGo.transform, false);
+        var fillAreaRect = (RectTransform)fillAreaGo.transform;
+        fillAreaRect.anchorMin = new Vector2(0f, 0.25f);
+        fillAreaRect.anchorMax = new Vector2(1f, 0.75f);
+        fillAreaRect.offsetMin = Vector2.zero;
+        fillAreaRect.offsetMax = Vector2.zero;
+
+        var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+        fillGo.transform.SetParent(fillAreaGo.transform, false);
+        StretchFull((RectTransform)fillGo.transform);
+        Image fillImage = fillGo.GetComponent<Image>();
+        fillImage.sprite = PillFillSprite;
+        fillImage.type = Image.Type.Sliced;
+        fillImage.color = Gold;
+
+        var handleAreaGo = new GameObject("Handle Slide Area", typeof(RectTransform));
+        handleAreaGo.transform.SetParent(sliderGo.transform, false);
+        StretchFull((RectTransform)handleAreaGo.transform);
+
+        var handleGo = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleGo.transform.SetParent(handleAreaGo.transform, false);
+        var handleRect = (RectTransform)handleGo.transform;
+        handleRect.sizeDelta = new Vector2(20f, size.y);
+        Image handleImage = handleGo.GetComponent<Image>();
+        handleImage.sprite = CircleSprite;
+        handleImage.color = TextLight;
+
+        Slider slider = sliderGo.GetComponent<Slider>();
+        slider.fillRect = fillGo.GetComponent<RectTransform>();
+        slider.handleRect = handleGo.GetComponent<RectTransform>();
+        slider.targetGraphic = handleImage;
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.value = 1f;
+
+        return slider;
     }
 
     /// <summary>Top-down absolute-pixel band stacking (ported from PlayerHudGenerator.TopStretchX)

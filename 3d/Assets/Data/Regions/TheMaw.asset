@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2cd076d2ba87d4a17aa088e961c680b4, type: 3}
+  m_Name: TheMaw
+  m_EditorClassIdentifier: LionQuest.Runtime::RegionDefinition
+  regionName: The Maw
+  minFraction: 0.85
+  maxFraction: 1
+  densityMultiplier: 2.5
+  holeDensityMultiplier: 2
+  restrictArchetypes: 1
+  eligibleArchetypes:
+  - {fileID: 11400000, guid: a0371458a717d4fd0898960513482b73, type: 2}
+  - {fileID: 11400000, guid: f6f1975ea1d594f5d8edab648305b1f1, type: 2}
+  groundBias: []

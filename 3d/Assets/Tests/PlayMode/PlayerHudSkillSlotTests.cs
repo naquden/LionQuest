@@ -300,13 +300,30 @@ public class PlayerHudSkillSlotTests : HarnessFixture
         return states[slotIndex].phase;
     }
 
+    /// <summary>
+    /// Seeds the roster character's save data. Writes through GameSaveController's shared record
+    /// when one exists (CharacterSelection now has a GameController — see AudioSystemGenerator —
+    /// so joining before this call already cached that character's record) rather than
+    /// SaveManager.SaveCharacter directly: a direct disk write happening AFTER the cache is
+    /// populated would be invisible to it, since GetSharedRecord only reads disk on a character's
+    /// first touch. Same single-writer principle CharacterStats/SkillTreeScreenController follow in
+    /// production, applied here so seeding after a join actually takes effect.
+    /// </summary>
     static void SeedSave(CharacterSelectionManager manager, params string[] nodes)
     {
         CharacterDefinition character = GetRosterCharacter(manager, 0);
         Assert.IsNotNull(character, "Roster (allCharacters) is empty in the CharacterSelection scene.");
-        var seeded = new CharacterSaveData(character.characterID) { souls = 500 };
-        seeded.purchasedSkillNodes.AddRange(nodes);
-        SaveManager.SaveCharacter(seeded);
+
+        CharacterSaveData record = GameSaveController.Instance != null
+            ? GameSaveController.Instance.GetSharedRecord(character.characterID)
+            : SaveManager.LoadCharacter(character.characterID);
+
+        record.souls = 500;
+        record.purchasedSkillNodes.Clear();
+        record.purchasedSkillNodes.AddRange(nodes);
+
+        if (GameSaveController.Instance != null) GameSaveController.Instance.FlushCharacter(character.characterID);
+        else SaveManager.SaveCharacter(record);
     }
 
     static PlayerHUDPanel GetBoundPanel()

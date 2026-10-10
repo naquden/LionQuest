@@ -100,13 +100,23 @@ public static class AgentGymGenerator
         lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
     }
 
-    /// <summary>Flat collider ground plus the four spawn points PlayerSpawner uses.</summary>
+    /// <summary>
+    /// Flat collider ground plus the four spawn points PlayerSpawner uses.
+    ///
+    /// A Cube, not a Plane. A Plane's MeshCollider is a single zero-thickness quad, and a
+    /// gravity-driven capsule resting exactly on it can occasionally be resolved to the wrong side and
+    /// fall through — which showed up as a rare GroundStandingTests failure with the player at
+    /// y = -2.3 instead of its usual 0.5. A box gives the solver real depth to push back out of. Scaled
+    /// and sunk so its top face is at y = 0, matching the Plane it replaces.
+    /// </summary>
+    const float GroundThickness = 2f;
+
     static Transform[] BuildGround()
     {
-        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
         ground.name = "Ground";
-        ground.transform.position = Vector3.zero;
-        ground.transform.localScale = new Vector3(6f, 1f, 6f); // 60x60 units
+        ground.transform.position = new Vector3(0f, -GroundThickness * 0.5f, 0f);
+        ground.transform.localScale = new Vector3(60f, GroundThickness, 60f); // 60x60 units, as before
 
         var pointsParent = new GameObject("SpawnPoints").transform;
         Vector3[] offsets =
@@ -148,7 +158,9 @@ public static class AgentGymGenerator
     /// </summary>
     static TopDownCameraController BuildCamera()
     {
-        var cameraGo = new GameObject("Main Camera", typeof(Camera), typeof(TopDownCameraController));
+        // One AudioListener on the shared camera — see the note in Level1Generator.BuildCamera.
+        var cameraGo = new GameObject("Main Camera",
+            typeof(Camera), typeof(TopDownCameraController), typeof(AudioListener));
         cameraGo.tag = "MainCamera";
 
         Camera camera = cameraGo.GetComponent<Camera>();
@@ -175,7 +187,9 @@ public static class AgentGymGenerator
         so.FindProperty("minPlayerDistance").floatValue = 0f;
         so.FindProperty("maxPlayerDistance").floatValue = 24f;
         so.FindProperty("distanceMultiplier").floatValue = 0.5f;
-        so.FindProperty("lookAtOffset").vector3Value = new Vector3(0f, 1.5f, 0f);
+        // Same ceiling as Level1 — see the note there. The gym's ground is only 60 units wide, so
+        // this is never reached here; it matches the real scenes so the zoom behaves identically.
+        so.FindProperty("maxCameraDistance").floatValue = 90f;
         so.ApplyModifiedProperties();
 
         // Same solve as UpdateCameraPosition for a target at the origin, so frame 1 is already settled.

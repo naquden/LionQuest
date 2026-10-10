@@ -22,11 +22,17 @@ public class TopDownPlayerController : MonoBehaviour
     [SerializeField] private float stopDrag = 10f;
     
     [Header("Ground Detection")]
-    [Tooltip("MapGenerator that contains the ground type map. If not assigned, will try to find it in scene.")]
+    [Tooltip("MapGenerator holding the ground-type map and the island bounds. Players are prefabs " +
+             "instantiated at runtime, so this cannot be wired in the Inspector — PlayerSpawner " +
+             "injects it via SetMapGenerator. Left empty in scenes with no terrain (AgentGym).")]
     [SerializeField] private MapGenerator mapGenerator;
     
     [Tooltip("Enable debug logging for ground detection")]
     [SerializeField] private bool debugGroundDetection = false;
+
+    [Tooltip("Log every hit taken. Off by default — a busy fight against several enemies logs this " +
+             "every frame one lands, spamming the console badly enough to slow down headless test runs.")]
+    [SerializeField] private bool debugDamage = false;
     
     [Header("Rotation Settings")]
     [SerializeField] private float rotationSpeed = 10f;
@@ -42,16 +48,15 @@ public class TopDownPlayerController : MonoBehaviour
     [Header("References")]
     [SerializeField] private InputActionAsset inputActions;
     
-    [Tooltip("Camera to check viewport bounds against. Must be assigned in inspector. Should be the camera from TopDownCameraController.")]
-    [SerializeField] private Camera viewportCamera;
-    
-    [Header("Viewport Boundaries")]
-    [Tooltip("Margin from viewport edges (0-1). 0.1 means player can move within 10% of screen edge.")]
-    [SerializeField] private float viewportMargin = 0.1f;
-    
-    [Tooltip("Enable viewport boundary checking to prevent player from moving outside camera view.")]
-    [SerializeField] private bool enforceViewportBounds = true;
-    
+    [Header("Map Boundaries")]
+    [Tooltip("Keep the player inside the island (MapGenerator.GetPlayableRadius). Replaces the old " +
+             "per-player camera-viewport leash, which could freeze a player off-screen.")]
+    [SerializeField] private bool enforceMapBounds = true;
+
+    [Tooltip("How hard the map edge pushes the player back inward. Force, not a position clamp, so " +
+             "it composes with knockback and never teleports.")]
+    [SerializeField] private float boundsPushForce = 40f;
+
     [Header("Animation (Optional)")]
     [Tooltip("CharacterAnimator component for handling animations. Leave empty if not using animations.")]
     [SerializeField] private CharacterAnimator characterAnimator;
@@ -99,18 +104,56 @@ public class TopDownPlayerController : MonoBehaviour
     [Header("Health")]
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] public float currentHealth;
-    
+
+    [Header("Downed / Revive")]
+    [Tooltip("Radius a living teammate must stand within to revive this player while downed. " +
+             "Generous rather than tight: in a four-player scrum around a dying player, the reviver " +
+             "should not have to pixel-hunt the exact spot the downed body ended up knocked back to.")]
+    [SerializeField] private float reviveRadius = 2.5f;
+
+    [Tooltip("Seconds a living teammate must stay within reviveRadius, continuously, to revive this " +
+             "player. Stepping out of range resets progress rather than pausing it — reviving is a " +
+             "commitment, not something to tag and abandon while fighting off the enemy that downed " +
+             "you in the first place.")]
+    [SerializeField] private float reviveDuration = 2f;
+
+    [Tooltip("Fraction of max health a revived player returns with. Below 1 so being downed still " +
+             "costs the team something even after a successful revive, rather than being a free do-over.")]
+    [SerializeField] private float reviveHealthFraction = 0.5f;
+
+    private bool isDowned;
+    private float reviveProgress;
+
     [Header("Stats")]
     [SerializeField] private CharacterStats characterStats;
-    
+
     // Events
     public System.Action<float, float> OnHealthChanged; // current, max
     public System.Action OnDeath;
-    
+
+    /// <summary>Fired when this player goes down but the run continues — at least one teammate was
+    /// still alive at the moment of death, so Die() (permanent, run-ending) did not fire instead.</summary>
+    public System.Action OnDowned;
+
+    /// <summary>Fired when a downed player is revived by a teammate's proximity.</summary>
+    public System.Action OnRevived;
+
     // Properties
     public float CurrentHealth => currentHealth;
     public float MaxHealth => maxHealth;
+
+    /// <summary>False while downed as well as while permanently dead — both states are "not playing
+    /// right now" for every existing caller (movement/attack gating, camera framing, enemy targeting,
+    /// PauseMenuController's all-dead check). Only EnterDowned/Revive/Die distinguish the two.</summary>
     public bool IsAlive => currentHealth > 0f;
+
+    /// <summary>True between EnterDowned and Revive. A downed player is not IsAlive, but unlike a
+    /// permanently dead one can still return to the run — see UpdateDownedState.</summary>
+    public bool IsDowned => isDowned;
+
+    /// <summary>0..1 progress toward reviving, for a HUD to show a fill ring over a downed
+    /// character. 0 whenever no teammate is currently in range.</summary>
+    public float ReviveProgress01 => reviveDuration > 0f ? Mathf.Clamp01(reviveProgress / reviveDuration) : 0f;
     
     private Rigidbody rb;
     private CapsuleCollider capsuleCollider;
@@ -471,30 +514,8 @@ public class TopDownPlayerController : MonoBehaviour
             }
         }
         
-        // Try to find MapGenerator if not assigned
-        if (mapGenerator == null)
-        {
-            mapGenerator = FindFirstObjectByType<MapGenerator>();
-            if (mapGenerator == null)
-            {
-                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': MapGenerator is not assigned and could not be found in the scene! Ground type detection will not work. Please ensure a MapGenerator component exists in the scene or assign it in the inspector.");
-            }
-        }
-        
-        // Find viewportCamera if not assigned - look for MainCamera tag
-        if (viewportCamera == null)
-        {
-            viewportCamera = Camera.main;
-            if (viewportCamera != null)
-            {
-                Debug.Log($"TopDownPlayerController on '{gameObject.name}': Found viewport camera '{viewportCamera.name}' via Camera.main");
-            }
-            else
-            {
-                Debug.LogError($"TopDownPlayerController on '{gameObject.name}': ViewportCamera is not assigned and no camera with 'MainCamera' tag found! Viewport bounds checking will not work.");
-            }
-        }
-        
+        // mapGenerator is deliberately NOT resolved here — see SetMapGenerator and Start.
+
         // Initialize health
         if (characterStats == null) characterStats = GetComponent<CharacterStats>();
         
@@ -544,6 +565,39 @@ public class TopDownPlayerController : MonoBehaviour
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
     
+    /// <summary>
+    /// Injects the scene's terrain. Players are prefabs instantiated at runtime, so this reference
+    /// cannot live in the prefab; PlayerSpawner passes its own Inspector-assigned MapGenerator. It
+    /// used to be resolved with FindFirstObjectByType, which the project's no-lookup-fallbacks rule
+    /// bans — and which would silently pick an arbitrary terrain in any scene holding more than one.
+    /// </summary>
+    public void SetMapGenerator(MapGenerator generator)
+    {
+        mapGenerator = generator;
+    }
+
+    private void Start()
+    {
+        // Validated in Start, not Awake: Awake runs during Instantiate, before PlayerSpawner has had
+        // any chance to inject. By Start the injection has happened.
+        if (mapGenerator == null)
+        {
+            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': no MapGenerator was injected. " +
+                           "Ground-type speed scaling, hole detection and island bounds are all dead. " +
+                           "Assign PlayerSpawner.mapGenerator in the scene — expected to be empty only in " +
+                           "deliberately terrain-free scenes such as AgentGym.");
+        }
+
+        // Registered here as well as in OnEnable, for the same reason CharacterStats does: the
+        // singleton may not exist yet when OnEnable runs (PlayerSpawner creates the GameController
+        // prefab in its own Start), and a player that misses registration is a player no enemy will
+        // ever target. Register* is idempotent.
+        if (GameSaveController.Instance != null)
+        {
+            GameSaveController.Instance.RegisterPlayerController(this);
+        }
+    }
+
     private void OnEnable()
     {
         // Re-snap here, not only in Awake: PlayerSpawner instantiates the prefab (which runs Awake
@@ -551,6 +605,11 @@ public class TopDownPlayerController : MonoBehaviour
         // the Awake snap alone left every spawned player buried to the waist in the floor. OnEnable
         // runs on the spawner's SetActive(true) call, which happens after the position is assigned.
         SnapToGroundLevel();
+
+        if (GameSaveController.Instance != null)
+        {
+            GameSaveController.Instance.RegisterPlayerController(this);
+        }
 
         // PlayerInput manages its own action map lifecycle; only the shared-asset fallback needs this.
         if (playerInput == null && inputActions != null)
@@ -572,6 +631,11 @@ public class TopDownPlayerController : MonoBehaviour
 
     private void OnDisable()
     {
+        if (GameSaveController.Instance != null)
+        {
+            GameSaveController.Instance.UnregisterPlayerController(this);
+        }
+
         if (playerInput == null && inputActions != null)
         {
             inputActions.Disable();
@@ -593,6 +657,14 @@ public class TopDownPlayerController : MonoBehaviour
         }
 
         if (PauseMenuController.Instance != null && PauseMenuController.Instance.IsOpen) return;
+
+        // Downed players still need a frame tick — that is how revive progress accumulates — so
+        // this branches before the corpse early-out below rather than folding into it.
+        if (isDowned)
+        {
+            UpdateDownedState();
+            return;
+        }
 
         // A corpse must not move, swing or cast. Die() only disabled input on the shared-asset
         // fallback path (playerInput == null), so a PlayerInput-driven player — i.e. every player
@@ -698,22 +770,7 @@ public class TopDownPlayerController : MonoBehaviour
             
             // Normalize to prevent faster diagonal movement
             desiredDirection.Normalize();
-            
-            // Check viewport bounds if enabled
-            if (enforceViewportBounds && viewportCamera != null)
-            {
-                // Calculate next position based on movement direction
-                Vector3 nextPosition = transform.position + desiredDirection * (currentSpeed * Time.deltaTime);
-                
-                // Check if next position would be outside viewport
-                if (!IsPositionWithinViewport(nextPosition))
-                {
-                    // Block movement in the direction that would go outside viewport
-                    // Try to allow movement in other directions if possible
-                    desiredDirection = GetClampedMovementDirection(desiredDirection, transform.position, currentSpeed * Time.deltaTime);
-                }
-            }
-            
+
             moveDirection = desiredDirection;
         }
         else
@@ -791,6 +848,35 @@ public class TopDownPlayerController : MonoBehaviour
                 rb.linearVelocity = new Vector3(0f, rb.linearVelocity.y, 0f);
             }
         }
+
+        ApplyMapBoundsForce();
+    }
+
+    /// <summary>
+    /// Pushes the player back toward the island when they stray past the playable radius.
+    ///
+    /// Runs unconditionally, which is the whole point: the leash this replaced only evaluated while
+    /// the player was pressing a direction, so a player who was standing still could be carried out
+    /// of bounds and then had every movement axis rejected — permanently stuck. A force that always
+    /// applies can never trap anyone, because it only ever pushes inward, and the player keeps full
+    /// authority over their own input.
+    /// </summary>
+    private void ApplyMapBoundsForce()
+    {
+        if (!enforceMapBounds || mapGenerator == null) return;
+
+        Vector3 center = mapGenerator.GetIslandCenter();
+        Vector3 offset = transform.position - center;
+        offset.y = 0f;
+
+        float radius = mapGenerator.GetPlayableRadius();
+        float distance = offset.magnitude;
+        if (distance <= radius || distance < 0.001f) return;
+
+        // Ramps in over the first 4 units past the edge so the boundary feels like a shove rather
+        // than a wall, and so a knockback that flings a player far out still brings them home.
+        float overshoot = Mathf.Clamp01((distance - radius) / 4f);
+        rb.AddForce(-offset.normalized * (boundsPushForce * overshoot), ForceMode.Force);
     }
     
     /// <summary>
@@ -879,7 +965,10 @@ public class TopDownPlayerController : MonoBehaviour
                 characterAnimator.TriggerAttack(0); // Default to light attack (type 0)
             }
 
-            // Perform combat attack
+            // Perform combat attack. No SFX call here — Enemy/TopDownPlayerController.TakeDamage
+            // already plays "Hit" on impact; a second call at swing time would double up the sound
+            // on every attack that actually connects and play a "Hit" with nothing hit on every one
+            // that doesn't.
             if (combatController != null && basicAttackData != null)
             {
                 combatController.PerformAttack(basicAttackData);
@@ -934,6 +1023,10 @@ public class TopDownPlayerController : MonoBehaviour
             ? characterStats.GetSkillValue(skillId, SkillEffect.Cooldown, baseCooldown)
             : baseCooldown;
         skillLockUntilTime = Time.time + skillLockDuration;
+
+        // Every successful skill cast (all 3 slots) ends by calling this, right after its own
+        // TriggerSkillN animation call — a single hook point instead of three duplicated ones.
+        if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("SkillCast");
     }
 
     private void HandleSkills()
@@ -1318,72 +1411,6 @@ public class TopDownPlayerController : MonoBehaviour
     }
     
     /// <summary>
-    /// Check if a world position is within the camera viewport bounds
-    /// </summary>
-    private bool IsPositionWithinViewport(Vector3 worldPosition)
-    {
-        if (viewportCamera == null)
-        {
-            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Cannot check viewport bounds - viewportCamera is null! Please assign a camera in the inspector.");
-            return true; // Allow movement if camera is missing to prevent blocking
-        }
-        
-        // Convert world position to viewport coordinates (0-1 range)
-        Vector3 viewportPos = viewportCamera.WorldToViewportPoint(worldPosition);
-        
-        // Check if position is within viewport bounds (with margin)
-        // X and Y should be between margin and (1 - margin)
-        // Z should be positive (in front of camera)
-        bool withinX = viewportPos.x >= viewportMargin && viewportPos.x <= (1f - viewportMargin);
-        bool withinY = viewportPos.y >= viewportMargin && viewportPos.y <= (1f - viewportMargin);
-        bool inFront = viewportPos.z > 0f;
-        
-        return withinX && withinY && inFront;
-    }
-    
-    /// <summary>
-    /// Get a movement direction that is clamped to stay within viewport bounds
-    /// Tries to allow partial movement if only one axis would go outside
-    /// </summary>
-    private Vector3 GetClampedMovementDirection(Vector3 desiredDirection, Vector3 currentPosition, float moveDistance)
-    {
-        if (viewportCamera == null)
-        {
-            Debug.LogError($"TopDownPlayerController on '{gameObject.name}': Cannot clamp movement direction - viewportCamera is null! Please assign a camera in the inspector.");
-            return desiredDirection;
-        }
-        
-        Vector3 clampedDirection = Vector3.zero;
-        
-        // Test X movement separately
-        Vector3 testX = currentPosition + new Vector3(desiredDirection.x * moveDistance, 0f, 0f);
-        bool canMoveX = IsPositionWithinViewport(testX);
-        
-        // Test Z movement separately
-        Vector3 testZ = currentPosition + new Vector3(0f, 0f, desiredDirection.z * moveDistance);
-        bool canMoveZ = IsPositionWithinViewport(testZ);
-        
-        // Allow movement in directions that stay within bounds
-        if (canMoveX)
-        {
-            clampedDirection.x = desiredDirection.x;
-        }
-        
-        if (canMoveZ)
-        {
-            clampedDirection.z = desiredDirection.z;
-        }
-        
-        // Normalize to maintain consistent speed
-        if (clampedDirection.magnitude > 0.1f)
-        {
-            clampedDirection.Normalize();
-        }
-        
-        return clampedDirection;
-    }
-    
-    /// <summary>
     /// Take damage and apply knockback force.
     /// Called by enemy's combat system when hitting the player.
     /// </summary>
@@ -1400,7 +1427,7 @@ public class TopDownPlayerController : MonoBehaviour
         
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
         
-        Debug.Log($"[Player] {gameObject.name} took {damage} damage. Health: {currentHealth}/{maxHealth}");
+        if (debugDamage) Debug.Log($"[Player] {gameObject.name} took {damage} damage. Health: {currentHealth}/{maxHealth}");
         
         // Apply knockback (horizontal only)
         if (knockbackForce > 0f && rb != null)
@@ -1411,20 +1438,111 @@ public class TopDownPlayerController : MonoBehaviour
         
         // Trigger hit animation
         characterAnimator?.TriggerHit();
-        
-        // Check for death
+
+        if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("Hit");
+
+        // Check for death. Downed vs permanently dead is decided here, once, at the moment health
+        // hits 0 — see EnterDowned/Die.
         if (currentHealth <= 0f)
         {
-            Die();
+            bool anyTeammateAlive = GameSaveController.Instance != null && GameSaveController.Instance.AnyPlayerAlive();
+            if (anyTeammateAlive)
+            {
+                EnterDowned();
+            }
+            else
+            {
+                Die();
+            }
         }
     }
-    
+
     /// <summary>
     /// Take damage without knockback
     /// </summary>
     public void TakeDamage(float damage)
     {
         TakeDamage(damage, Vector3.zero, 0f);
+    }
+
+    /// <summary>
+    /// Drops this player into the downed state: not IsAlive (so movement/attack/skills lock exactly
+    /// like permanent death), but revivable by a teammate standing close for reviveDuration — see
+    /// UpdateDownedState, called from Update while isDowned.
+    ///
+    /// Split out of Die() because the two states diverge immediately: Die() fires OnDeath (which
+    /// PauseMenuController listens to for its all-dead game-over check) and disables the shared-asset
+    /// input fallback for good, neither of which should happen to a player who can still come back.
+    /// </summary>
+    private void EnterDowned()
+    {
+        if (isDowned) return; // already down; a second lethal hit while downed is a no-op (see TakeDamage's IsAlive guard) but guard anyway for direct callers.
+
+        isDowned = true;
+        reviveProgress = 0f;
+
+        if (battleCryRoutine != null)
+        {
+            StopCoroutine(battleCryRoutine);
+            battleCryRoutine = null;
+        }
+        battleCrySpeedMultiplier = 1f;
+
+        characterAnimator?.TriggerDeath(); // same "collapsed" pose as permanent death; TriggerArise reverses it on revive.
+        OnDowned?.Invoke();
+    }
+
+    /// <summary>
+    /// Called every frame this player is downed (see Update). Teammates in range make progress
+    /// continuous, not banked — see reviveDuration's doc comment for why leaving range resets rather
+    /// than pausing.
+    /// </summary>
+    private void UpdateDownedState()
+    {
+        if (!AnyTeammateInReviveRange())
+        {
+            reviveProgress = 0f;
+            return;
+        }
+
+        reviveProgress += Time.deltaTime;
+        if (reviveProgress >= reviveDuration)
+        {
+            Revive();
+        }
+    }
+
+    /// <summary>
+    /// Whether a living, non-downed teammate is currently within reviveRadius. Goes through
+    /// GameSaveController's player registry rather than a physics overlap check — the registry
+    /// already exists for enemy targeting (FindNearestLivingPlayer) and reusing it here keeps the
+    /// project's no-lookup-fallbacks rule without adding a second way to enumerate players.
+    /// </summary>
+    private bool AnyTeammateInReviveRange()
+    {
+        if (GameSaveController.Instance == null) return false;
+
+        float sqrRadius = reviveRadius * reviveRadius;
+        foreach (TopDownPlayerController other in GameSaveController.Instance.PlayerControllers)
+        {
+            if (other == null || other == this) continue;
+            if (!other.IsAlive) continue; // a downed or dead teammate cannot revive anyone.
+
+            if ((other.transform.position - transform.position).sqrMagnitude <= sqrRadius) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Brings a downed player back into the run at reviveHealthFraction of max health.</summary>
+    private void Revive()
+    {
+        isDowned = false;
+        reviveProgress = 0f;
+        currentHealth = maxHealth * reviveHealthFraction;
+
+        characterAnimator?.TriggerArise();
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+        OnRevived?.Invoke();
     }
     
     /// <summary>
@@ -1443,6 +1561,8 @@ public class TopDownPlayerController : MonoBehaviour
 
         OnDeath?.Invoke();
         characterAnimator?.TriggerDeath();
+
+        if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("PlayerDeath");
 
         // Disable input
         if (playerInput == null && inputActions != null)
@@ -1478,22 +1598,13 @@ public class TopDownPlayerController : MonoBehaviour
             Gizmos.DrawWireSphere(transform.position, 0.5f);
         }
         
-        // Draw viewport bounds indicator
-        if (enforceViewportBounds && viewportCamera != null && Application.isPlaying)
+        // Draw the map boundary the player is held inside
+        if (enforceMapBounds && mapGenerator != null)
         {
-            // Draw a line from player to viewport edge
-            Vector3 viewportPos = viewportCamera.WorldToViewportPoint(transform.position);
-            Gizmos.color = Color.yellow;
-            
-            // Draw lines to viewport boundaries
-            if (viewportPos.x <= viewportMargin || viewportPos.x >= (1f - viewportMargin))
-            {
-                Gizmos.color = Color.red;
-            }
-            else if (viewportPos.y <= viewportMargin || viewportPos.y >= (1f - viewportMargin))
-            {
-                Gizmos.color = Color.red;
-            }
+            Gizmos.color = Color.cyan;
+            Vector3 center = mapGenerator.GetIslandCenter();
+            center.y = transform.position.y;
+            Gizmos.DrawWireSphere(center, mapGenerator.GetPlayableRadius());
         }
     }
 }

@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b283d9ced3f7c4c24b8682594dc439be, type: 3}
+  m_Name: EnemyLootTable
+  m_EditorClassIdentifier: LionQuest.Runtime::LootTable
+  items:
+  - prefab: {fileID: 4423582773423769873, guid: 968efc754d61941c9b19a40bef469e79, type: 3}
+    dropChance: 15

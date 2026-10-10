@@ -17,12 +17,14 @@ public class HealthPickup : MonoBehaviour
             if (player.CurrentHealth < player.MaxHealth)
             {
                 player.Heal(healAmount);
-                
+
                 if (pickupEffect != null)
                 {
                     Instantiate(pickupEffect, transform.position, Quaternion.identity);
                 }
-                
+
+                if (AudioDirector.Instance != null) AudioDirector.Instance.PlaySfx("Pickup");
+
                 Debug.Log($"[Pickup] Player picked up health pack (+{healAmount})");
                 Destroy(gameObject);
             }

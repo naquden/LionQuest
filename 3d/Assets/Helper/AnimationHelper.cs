@@ -1,3 +1,8 @@
+// Editor-only in its entirety: this is an EditorWindow, and Assets/Helper/ is covered by no
+// asmdef, so it lands in Assembly-CSharp and is compiled for the player. Without this guard the
+// UnityEditor references fail to resolve and NO player build can be produced at all. Siblings
+// AnimationClipLister.cs and CharacterSetupHelper.cs already guard the same way.
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -303,3 +308,4 @@ public class AnimationHelper : EditorWindow
     }
 }
 
+#endif

@@ -61,6 +61,23 @@ public class CharacterSelectionManager : MonoBehaviour
         return def.unlockedByDefault;
     }
 
+    /// <summary>
+    /// Routed through GameSaveController's cached per-character record when it exists, same as
+    /// SkillTreeScreenController.Open — the upgrade shop opened from TryOpenUpgrade writes purchases
+    /// through GameSaveController.FlushCharacter, so reading straight from SaveManager here (a
+    /// separate loaded copy) would show pre-purchase souls until the process happened to reload that
+    /// characterID from disk again. GameSaveController.Instance is expected to already exist by the
+    /// time this scene runs — PlayerSpawner's earlier "will crash if GameSaveController is missing"
+    /// contract applies to any scene the player reaches, not just gameplay — but this call site can
+    /// be reached before a player has spawned, so it falls back rather than crashing.
+    /// </summary>
+    private static CharacterSaveData LoadCharacterSave(string characterID)
+    {
+        return GameSaveController.Instance != null
+            ? GameSaveController.Instance.GetSharedRecord(characterID)
+            : SaveManager.LoadCharacter(characterID);
+    }
+
     // Called by CharacterSelectionInputHandler when PlayerInputManager spawns a SelectionPlayer.
     public int AssignSlot(PlayerInput playerInput)
     {
@@ -75,7 +92,7 @@ public class CharacterSelectionManager : MonoBehaviour
                 if (allCharacters.Length > 0)
                 {
                     CharacterDefinition selected = allCharacters[0];
-                    CharacterSaveData save = SaveManager.LoadCharacter(selected.characterID);
+                    CharacterSaveData save = LoadCharacterSave(selected.characterID);
                     slots[i].SetSelecting(allCharacters, 0, IsUnlocked, save);
                 }
 
@@ -92,6 +109,14 @@ public class CharacterSelectionManager : MonoBehaviour
     {
         PlayerSlotState state = states[slotIndex];
         if (state.phase == SlotPhase.Empty) return;
+
+        // Destroy the SelectionPlayer PlayerInputManager spawned for this device, not just clear the
+        // slot state. Without this the device's PlayerInput/CharacterSelectionInputHandler kept
+        // living in the scene after leaving — a ghost that still held one of PlayerInputManager's
+        // m_MaxPlayerCount (4) join slots forever, so the SAME device (and eventually every device,
+        // if each cycled leave once) could never rejoin: PlayerInputManager only spawns a new
+        // instance for a device it does not already consider joined.
+        if (state.playerInput != null) Object.Destroy(state.playerInput.gameObject);
 
         state.phase = SlotPhase.Empty;
         state.playerInput = null;
@@ -130,7 +155,7 @@ public class CharacterSelectionManager : MonoBehaviour
         state.carouselIndex = ((state.carouselIndex + direction) % allCharacters.Length + allCharacters.Length) % allCharacters.Length;
 
         CharacterDefinition selected = allCharacters[state.carouselIndex];
-        CharacterSaveData save = SaveManager.LoadCharacter(selected.characterID);
+        CharacterSaveData save = LoadCharacterSave(selected.characterID);
         slots[slotIndex].UpdateCarousel(state.carouselIndex);
         slots[slotIndex].UpdateStats(selected, save);
     }
@@ -196,7 +221,7 @@ public class CharacterSelectionManager : MonoBehaviour
         CharacterDefinition selected = allCharacters.Length > 0 ? allCharacters[state.carouselIndex] : null;
         if (selected != null)
         {
-            CharacterSaveData save = SaveManager.LoadCharacter(selected.characterID);
+            CharacterSaveData save = LoadCharacterSave(selected.characterID);
             slots[slotIndex].UpdateStats(selected, save);
         }
     }

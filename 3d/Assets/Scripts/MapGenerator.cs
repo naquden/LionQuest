@@ -40,6 +40,51 @@ public class MapGenerator : MonoBehaviour
                            terrainOrigin.z + mapSize.y * 0.5f);
     }
 
+    /// <summary>
+    /// Horizontal radius from <see cref="GetIslandCenter"/> that players are kept inside. Reaches the
+    /// middle of the sand ring, so a player can walk onto the beach but not into the ocean.
+    /// This replaced the per-player camera-viewport leash that used to bound movement: that leash
+    /// froze any player who was carried out of frame by a teammate, because both movement axes were
+    /// rejected at once and nothing let them walk back in. Containment is a property of the map, not
+    /// of where the shared camera happens to be pointing.
+    /// </summary>
+    public float GetPlayableRadius()
+    {
+        return islandRadius + beachWidth * 0.5f;
+    }
+
+    [Header("Regions")]
+    [Tooltip("Difficulty bands by distance from the island centre. Every band is always walkable — " +
+             "regions only change how hard survival is, never whether an area is reachable. Leave " +
+             "empty to skip all region-based biasing (legacy single-biome behaviour).")]
+    [SerializeField] private RegionDefinition[] regions;
+
+    /// <summary>
+    /// Resolves which RegionDefinition a world position falls in, by horizontal distance from
+    /// GetIslandCenter() as a fraction of GetPlayableRadius(). Returns null if no band matches
+    /// (no regions assigned, or the fraction lands in a gap between authored bands).
+    /// </summary>
+    public RegionDefinition GetRegionAt(Vector3 worldPosition)
+    {
+        if (regions == null || regions.Length == 0) return null;
+
+        Vector3 center = GetIslandCenter();
+        float dx = worldPosition.x - center.x;
+        float dz = worldPosition.z - center.z;
+        float distance = Mathf.Sqrt(dx * dx + dz * dz);
+
+        float radius = GetPlayableRadius();
+        float t = radius > 0f ? Mathf.Clamp01(distance / radius) : 0f;
+
+        foreach (var region in regions)
+        {
+            if (region == null) continue;
+            if (t >= region.minFraction && t < region.maxFraction) return region;
+        }
+
+        return null;
+    }
+
     [Header("Terrain Settings")]
     [Tooltip("Generate flat terrain (no height variation)")]
     [SerializeField] private bool flatTerrain = false;
@@ -215,33 +260,66 @@ public class MapGenerator : MonoBehaviour
         }
     }
     
+    private int lastGeneratedSeed;
+
     /// <summary>
-    /// Generates the entire map (terrain + biomes)
+    /// Seed of the most recently generated map. Only meaningful after GenerateMap has run.
+    /// </summary>
+    public int GetLastGeneratedSeed()
+    {
+        return lastGeneratedSeed;
+    }
+
+    /// <summary>
+    /// Picks a fresh seed for a new run. Not derived from Unity's global RNG state, so it doesn't
+    /// depend on how much randomness earlier code already consumed this session.
+    /// </summary>
+    private int GenerateRandomSeed()
+    {
+        return System.Guid.NewGuid().GetHashCode();
+    }
+
+    /// <summary>
+    /// Generates the entire map (terrain + biomes) with a freshly picked seed. Every run gets a
+    /// different layout — retrying after death re-enters this scene and calls this again.
     /// </summary>
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
+        GenerateMap(GenerateRandomSeed());
+    }
+
+    /// <summary>
+    /// Generates the entire map (terrain + biomes) deterministically from the given seed. Height
+    /// noise is coordinate-deterministic Perlin and is unaffected by the seed; everything else
+    /// that calls Random (path waypoints, hole placement, region ground-type bias) is seeded here.
+    /// </summary>
+    public void GenerateMap(int seed)
+    {
+        Random.InitState(seed);
+        lastGeneratedSeed = seed;
+
         // Ensure terrain is initialized
         if (terrain == null || terrainData == null)
         {
             Debug.Log("MapGenerator: Terrain not initialized. Initializing now...");
             InitializeTerrain();
-            
+
             if (terrain == null || terrainData == null)
             {
                 Debug.LogError("MapGenerator: Failed to initialize Terrain!");
                 return;
             }
         }
-        
+
         if (availableGroundTypes == null || availableGroundTypes.Count == 0)
         {
             Debug.LogError("MapGenerator: No ground types assigned! Please assign ground types in the inspector.");
             return;
         }
-        
-        Debug.Log("MapGenerator: Starting map generation...");
-        
+
+        Debug.Log($"MapGenerator: Starting map generation with seed {seed}...");
+
         // Set terrain size
         terrainData.size = new Vector3(mapSize.x, terrainHeight, mapSize.y);
         terrain.transform.position = terrainOrigin;
@@ -537,13 +615,44 @@ public class MapGenerator : MonoBehaviour
         {
             for (int y = 0; y < terrainResolution; y++)
             {
-                groundTypeMap[x, y] = baseType;
+                float wx = (float)x / terrainResolution * mapSize.x;
+                float wy = (float)y / terrainResolution * mapSize.y;
+                groundTypeMap[x, y] = PickBiasedGroundType(wx, wy, baseType);
             }
         }
 
         PaintPaths();
 
         Debug.Log($"MapGenerator: Base ground '{baseType.groundName}' + {pathCount} paths. Ground type map size: {terrainResolution}x{terrainResolution}");
+    }
+
+    /// <summary>
+    /// Picks a ground type for a base-layer cell, nudged toward a region's groundBias entries if
+    /// the cell falls in a region that defines any. Falls back to fallback when the region has no
+    /// bias, has none assigned, or the weighted roll lands on nothing (zero total weight).
+    /// </summary>
+    private GroundType PickBiasedGroundType(float worldX, float worldY, GroundType fallback)
+    {
+        RegionDefinition region = GetRegionAt(new Vector3(terrainOrigin.x + worldX, 0f, terrainOrigin.z + worldY));
+        if (region == null || region.groundBias == null || region.groundBias.Length == 0) return fallback;
+
+        float total = 0f;
+        foreach (var bias in region.groundBias)
+        {
+            if (bias.type != null) total += bias.weight;
+        }
+        if (total <= 0f) return fallback;
+
+        float roll = Random.Range(0f, total);
+        float cumulative = 0f;
+        foreach (var bias in region.groundBias)
+        {
+            if (bias.type == null) continue;
+            cumulative += bias.weight;
+            if (roll <= cumulative) return bias.type;
+        }
+
+        return fallback;
     }
 
     /// <summary>
@@ -662,35 +771,55 @@ public class MapGenerator : MonoBehaviour
             int x = Random.Range(terrainResolution / 4, terrainResolution * 3 / 4);
             int y = Random.Range(terrainResolution / 4, terrainResolution * 3 / 4);
 
-            // Random size
-            float holeSize = Random.Range(minHoleSize, maxHoleSize);
-            int holeRadius = Mathf.RoundToInt(holeSize * pixelsPerUnit);
+            // A region's holeDensityMultiplier scales how many holes land here: >1 stamps extra
+            // holes at this roll (fractional part resolved by a coin flip), <1 sometimes skips it
+            // entirely, replacing the old flat inner-50%-uniform rule with a per-region density.
+            float worldX = (float)x / terrainResolution * mapSize.x;
+            float worldY = (float)y / terrainResolution * mapSize.y;
+            RegionDefinition region = GetRegionAt(new Vector3(terrainOrigin.x + worldX, 0f, terrainOrigin.z + worldY));
+            float multiplier = region != null ? region.holeDensityMultiplier : 1f;
 
-            // Create circular hole
-            for (int dx = -holeRadius; dx <= holeRadius; dx++)
+            int stampCount = Mathf.FloorToInt(multiplier);
+            if (Random.value < multiplier - stampCount) stampCount++;
+
+            for (int s = 0; s < stampCount; s++)
             {
-                for (int dy = -holeRadius; dy <= holeRadius; dy++)
-                {
-                    int nx = x + dx;
-                    int ny = y + dy;
-
-                    if (nx >= 0 && nx < terrainResolution && ny >= 0 && ny < terrainResolution)
-                    {
-                        float distance = Mathf.Sqrt(dx * dx + dy * dy);
-                        if (distance <= holeRadius)
-                        {
-                            // Unity's heights array is indexed [y, x], groundTypeMap is [x, y].
-                            if (heights[ny, nx] < minGroundNormalized) continue;
-
-                            groundTypeMap[nx, ny] = holeType;
-                            heights[ny, nx] = Mathf.Max(0f, heights[ny, nx] - depthNormalized);
-                        }
-                    }
-                }
+                float holeSize = Random.Range(minHoleSize, maxHoleSize);
+                int holeRadius = Mathf.RoundToInt(holeSize * pixelsPerUnit);
+                StampHole(x, y, holeRadius, holeType, heights, depthNormalized, minGroundNormalized);
             }
         }
 
         terrainData.SetHeights(0, 0, heights);
+    }
+
+    /// <summary>
+    /// Carves one circular hole into groundTypeMap/heights at a given cell, skipping any cell
+    /// already at or below the waterline.
+    /// </summary>
+    private void StampHole(int x, int y, int holeRadius, GroundType holeType, float[,] heights, float depthNormalized, float minGroundNormalized)
+    {
+        for (int dx = -holeRadius; dx <= holeRadius; dx++)
+        {
+            for (int dy = -holeRadius; dy <= holeRadius; dy++)
+            {
+                int nx = x + dx;
+                int ny = y + dy;
+
+                if (nx >= 0 && nx < terrainResolution && ny >= 0 && ny < terrainResolution)
+                {
+                    float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (distance <= holeRadius)
+                    {
+                        // Unity's heights array is indexed [y, x], groundTypeMap is [x, y].
+                        if (heights[ny, nx] < minGroundNormalized) continue;
+
+                        groundTypeMap[nx, ny] = holeType;
+                        heights[ny, nx] = Mathf.Max(0f, heights[ny, nx] - depthNormalized);
+                    }
+                }
+            }
+        }
     }
     
     /// <summary>

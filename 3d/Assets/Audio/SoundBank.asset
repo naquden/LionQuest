@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ab9145e54dd14c5da593fd0cbd13596, type: 3}
+  m_Name: SoundBank
+  m_EditorClassIdentifier: LionQuest.Runtime::SoundBank
+  entries:
+  - eventName: Hit
+    clip: {fileID: 8300000, guid: cadfaeaeaad614d3ebd7b38aceaf22e7, type: 3}
+  - eventName: EnemyDeath
+    clip: {fileID: 8300000, guid: 9e996c9bfa9884ffca7b365a98257beb, type: 3}
+  - eventName: PlayerDeath
+    clip: {fileID: 8300000, guid: 31dfa2d14b73c44398c0111486bdec6c, type: 3}
+  - eventName: SkillCast
+    clip: {fileID: 8300000, guid: 92493cbdcba664bb3aedc1a8957c7919, type: 3}
+  - eventName: Pickup
+    clip: {fileID: 8300000, guid: 54bbe9cee21b04a44961f3c2866d6920, type: 3}
+  - eventName: UIClick
+    clip: {fileID: 8300000, guid: ae44c9cdc800d4f22bfc03dc84d0a1bf, type: 3}
+  - eventName: Victory
+    clip: {fileID: 8300000, guid: 97f3ec2c0320949bf9398809495e566b, type: 3}
+  - eventName: GameOver
+    clip: {fileID: 8300000, guid: 366555766046b4476881209984e3008f, type: 3}

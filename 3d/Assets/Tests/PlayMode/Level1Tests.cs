@@ -59,7 +59,7 @@ public class Level1Tests : HarnessFixture
         float distanceFromCenter = Vector2.Distance(
             new Vector2(player.position.x, player.position.z),
             new Vector2(islandCenter.x, islandCenter.z));
-        Assert.Less(distanceFromCenter, 20f,
+        Assert.Less(distanceFromCenter, mapGenerator.GetPlayableRadius(),
             $"Player spawned {distanceFromCenter:F1}u from the island centre — that is out past the beach, in the ocean.");
 
         Shot("level1-spawn");
@@ -116,8 +116,9 @@ public class Level1Tests : HarnessFixture
 
         var player = Object.FindAnyObjectByType<TopDownPlayerController>();
 
-        // Nearest enemy: Enemy.FixedUpdate only pulls within pullRange (15u), and the ring sits at
-        // 16u from centre, so measure the one that is genuinely in range rather than all of them.
+        // Nearest enemy: Enemy.FixedUpdate only pulls within pullRange (15u), and the opening wave's
+        // innermost ring sits at 8u from centre, so measure the one that is genuinely in range
+        // rather than all of them.
         Enemy nearest = null;
         float nearestDistance = float.MaxValue;
         foreach (Enemy enemy in enemies)
@@ -172,14 +173,16 @@ public class Level1Tests : HarnessFixture
         Assert.IsNotNull(water, "No WaterSurface_ quad under the terrain — MapGenerator.SpawnOceanSurface did not run.");
         float waterY = water.position.y;
 
-        // Sweep the island plateau on a 1u grid rather than reaching into MapGenerator's private
+        // Sweep the island plateau on a 2u grid rather than reaching into MapGenerator's private
         // hole list: IsHoleAtPosition is what the player controller actually queries to start a fall.
+        // Candidate holes land anywhere in the inner 50% of the terrain (+/-70u at this map's scale),
+        // so the sweep must cover that whole range or it can miss every hole by chance.
         Vector3 center = mapGenerator.GetIslandCenter();
         int holeSamples = 0;
         float lowestHoleY = float.MaxValue;
-        for (float dx = -30f; dx <= 30f; dx += 1f)
+        for (float dx = -70f; dx <= 70f; dx += 2f)
         {
-            for (float dz = -30f; dz <= 30f; dz += 1f)
+            for (float dz = -70f; dz <= 70f; dz += 2f)
             {
                 var probe = new Vector3(center.x + dx, 0f, center.z + dz);
                 if (!mapGenerator.IsHoleAtPosition(probe)) continue;

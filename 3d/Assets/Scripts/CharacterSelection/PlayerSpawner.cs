@@ -17,6 +17,10 @@ public class PlayerSpawner : MonoBehaviour
     [Tooltip("Follow camera to register spawned players with. Optional — leave empty in scenes with a fixed camera.")]
     [SerializeField] private TopDownCameraController followCamera;
 
+    [Tooltip("Scene terrain, injected into each spawned player for ground-type speed, hole detection " +
+             "and island bounds. Optional — leave empty only in deliberately terrain-free scenes.")]
+    [SerializeField] private MapGenerator mapGenerator;
+
     [Tooltip("How many players to spawn when launched directly with no CharacterSelection data. " +
              "1 for normal scenes; raise it to stand up a local-coop scene that can be entered by " +
              "pressing Play, without walking the whole join flow first.")]
@@ -97,6 +101,12 @@ public class PlayerSpawner : MonoBehaviour
     {
         GameObject instance = Instantiate(definition.playerPrefab);
         instance.SetActive(false);
+
+        // Injected before the instance is activated, so the controller's own Start (which validates
+        // the reference) already sees it. A prefab cannot carry a scene reference itself, and the
+        // controller is not allowed to go looking for one.
+        TopDownPlayerController spawnedController = instance.GetComponent<TopDownPlayerController>();
+        if (spawnedController != null) spawnedController.SetMapGenerator(mapGenerator);
 
         CharacterStats stats = instance.GetComponent<CharacterStats>();
         if (stats != null)

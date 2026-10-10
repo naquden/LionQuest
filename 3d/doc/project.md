@@ -41,6 +41,65 @@ stub, none of which exist anymore.
 
 ---
 
+## Map Generation & Region Difficulty
+
+### Overview
+Every run generates a fresh, randomly-seeded island terrain via `MapGenerator.GenerateMap(int seed)`.
+The island is one continuous landmass — regions are difficulty *bands* by distance from the island
+centre, not separate zones behind gates. A player can always walk from the start region to the
+outermost region; nothing is geometrically locked. Difficulty is the only thing that decides whether
+they can survive once they get there.
+
+### Seeding
+`MapGenerator.GenerateMap(int seed)` calls `Random.InitState(seed)` before any randomized pass (path
+waypoints, hole placement, region ground-type biasing). Height noise itself is coordinate-deterministic
+Perlin and does not depend on the seed. `MapGenerator.Awake()` picks a fresh seed automatically every
+scene load via `GenerateRandomSeed()` (`System.Guid`-derived) — so retrying a run (which reloads the
+scene) always lands on a new map layout. The seed is not persisted anywhere; it exists only for the
+lifetime of one generated scene, queryable at runtime via `GetLastGeneratedSeed()` for logging/debugging.
+
+### Regions
+`RegionDefinition` (`Assets/Scripts/RegionDefinition.cs`) ScriptableObjects define distance bands from
+`MapGenerator.GetIslandCenter()`, each covering a `minFraction..maxFraction` of `GetPlayableRadius()`.
+`MapGenerator.GetRegionAt(Vector3 worldPosition)` resolves which region a point falls in at runtime —
+a sharp radius-fraction cutoff, no boundary noise (the existing splatmap gather already softens visual
+transitions; a region boundary is a gameplay/spawn concept, not a visual one). Level1 authors 5 bands
+via `Level1Generator.BuildRegions()`, sized against a 280×280 map (`IslandRadius=85`, `BeachWidth=10`,
+`GetPlayableRadius()=90`):
+
+| Region | Distance band | Density multiplier | Hole density multiplier | Archetype restriction |
+|---|---|---|---|---|
+| Start Meadow | 0.00–0.20 | 1.0× | 1.0× | none (all tiers) |
+| Wildwood | 0.20–0.42 | 1.3× | 1.0× | none |
+| Ashen Flats | 0.42–0.65 | 1.6× | 1.3× | none |
+| Shattered Reach | 0.65–0.85 | 2.0× | 1.6× | Ranged/Elite/Boss only |
+| The Maw | 0.85–1.00 | 2.5× | 2.0× | Elite/Boss only |
+
+`GenerateHoles()` reads each candidate hole's region and scales how many holes stamp there by
+`holeDensityMultiplier` (integer part stamps that many, the fractional remainder is a coin-flip for
+one more) — outer regions end up hazard-denser than the old flat inner-50%-uniform rule. `RegionDefinition`
+also carries a `groundBias` weighted-`GroundType` list for biasing terrain painting per region, but
+Level1's authored regions leave it empty today — see Known Gaps.
+
+### Difficulty feeding WaveSpawner
+`WaveSpawner` picks a spawn region *after* choosing an enemy's archetype (`PickSpawnRegion`), weighted
+by `densityMultiplier` among the regions that archetype is eligible for. A restricted archetype (e.g.
+Elite/Boss-only) can therefore never be assigned a region it isn't allowed in — no reject-and-retry
+loop needed. Wave-number gating (`archetype.minWave`) and spatial gating stack independently: a Boss
+archetype still needs `minWave` reached, but will never spawn in Start Meadow regardless of wave number.
+The hand-placed opening wave (wave 1, `Level1Generator.SpawnEnemies`) is unaffected — it doesn't consult
+regions at all, since its 3 fixed rings only need to clear `Enemy.pullRange` (15u), not express difficulty.
+
+### Progression loop tie-in
+Souls and skill-tree purchases never wipe on death or on map regeneration — no map/seed/region state is
+persisted anywhere in `GameSaveData`/`CharacterSaveData`, and `PauseMenuController`'s retry path reloads
+the scene, which both re-seeds the map (via `MapGenerator.Awake()`) and preserves every purchased
+stat/skill node exactly as before. Practically: dying near the edge of Wildwood on one attempt, buying a
+skill node with the souls earned, and retrying puts the player in a *different* Wildwood-equivalent
+layout, but strictly stronger than before — the intended "upgrade lets you push further out" loop.
+
+---
+
 ## Damage Calculation
 
 ### Melee / Skill 1
@@ -107,6 +166,9 @@ Enemy.Die() → OnDeath event → GameSaveController.OnEnemyKilled() → Charact
 | `GameSaveController.cs` | Singleton, enemy kill events, player registration |
 | `SaveManager.cs` | JSON read/write, per-character save slots |
 | `SaveDataTypes.cs` | `GameSaveData`, `CharacterSaveData` — serializable POCOs |
+| `MapGenerator.cs` | Procedural terrain, ocean falloff, region-band lookup, seeded generation |
+| `RegionDefinition.cs` | ScriptableObject: distance band, archetype eligibility, density/hole multipliers |
+| `WaveSpawner.cs` | Runtime wave spawning after the opening wave, region-aware archetype/position selection |
 
 ---
 
@@ -119,6 +181,12 @@ Enemy.Die() → OnDeath event → GameSaveController.OnEnemyKilled() → Charact
   graph (`doc/characterUpgrade.md`).
 - ~~`speedLevel` orphaned~~ — **resolved**: now the universal passive move-speed stat
   (`CharacterStats.GetMoveSpeedMultiplier()`), applied in `TopDownPlayerController.HandleMovement()`.
+- **Region visual identity is density/hazard-bias only** — Level1's 5 authored regions share the same 4
+  GroundTypes (Grass/Dirt/Hole/Sand, the URP terrain shader's per-pass layer ceiling) and are told apart
+  by hole density and enemy tier, not distinct textures; `RegionDefinition.groundBias` exists to bias
+  ground-type painting per region but is left empty by `Level1Generator.BuildRegions()`. A future pass
+  could populate it, or add per-region fog tint/lighting, to make the boundary more visually legible
+  without spending a texture-layer slot.
 
 ---
 

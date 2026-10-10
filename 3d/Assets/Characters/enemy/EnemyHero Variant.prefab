@@ -200,6 +200,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 8189980434977739222, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6738716638120674075}
+    - targetCorrespondingSourceObject: {fileID: 8189980434977739222, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7345138617717446492}
   m_SourcePrefab: {fileID: 100100000, guid: 2dfbb63c9cdf7504faf4ff26b0581598, type: 3}
 --- !u!4 &4754951633341321629 stripped
 Transform:
@@ -340,13 +343,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   maxHealth: 100
+  debugDamage: 0
   pullForce: 10
   pullRange: 15
   stopDistance: 1.5
   maxPullVelocity: 3
-  playerTag: Player
+  retargetInterval: 0.5
+  separationRadius: 1.2
+  separationForce: 8
   attackData: {fileID: 11400000, guid: 291f9806b3bcc47b3a00800b03faea5b, type: 2}
   attackCooldown: 2
+  rangedProjectilePrefab: {fileID: 0}
+  rangedProjectileSpeed: 12
+  rangedMuzzleHeight: 1
+  corpseLifetime: 5
 --- !u!114 &3987571181011835951
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -384,3 +394,16 @@ MonoBehaviour:
   attackPointDistance: 0.8
   attackPointHeight: 1
   debugCombat: 0
+--- !u!114 &7345138617717446492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5383820248657513255}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59af70bb8e353495387ff3015d57793f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: LionQuest.Runtime::LootDropper
+  lootTable: {fileID: 11400000, guid: c05ec41155bb5461682c8e899339c84e, type: 2}

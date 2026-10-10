@@ -32,8 +32,13 @@ public class SkillTreeUpgradeTests : HarnessFixture
         Assert.IsNotNull(character, "Roster (allCharacters) is empty in the CharacterSelection scene.");
 
         // Seed enough souls to afford a purchase before the skill tree screen loads its CharacterSaveData.
-        var seeded = new CharacterSaveData(character.characterID) { souls = 9999 };
-        SaveManager.SaveCharacter(seeded);
+        // Routed through the shared record (see LoadCharacterSave) rather than SaveManager.SaveCharacter
+        // directly: CharacterSelection now has a GameController (AudioSystemGenerator wires one in for
+        // music), so joining above already cached this characterID's record — a direct disk write at
+        // this point would be invisible to it, same staleness trap CharacterStats.Record exists to avoid
+        // in production.
+        LoadCharacterSave(character.characterID).souls = 9999;
+        FlushCharacterSave(character.characterID);
 
         yield return Press(pad, GamepadButton.North); // Upgrade -> opens skill tree panel
         yield return null;
@@ -43,24 +48,24 @@ public class SkillTreeUpgradeTests : HarnessFixture
 
         // Panel opens with the cursor in the CATEGORY list, so the first Submit only drills into
         // "Body" — it must not buy anything.
-        CharacterSaveData onOpen = SaveManager.LoadCharacter(character.characterID);
+        int soulsOnOpen = LoadCharacterSave(character.characterID).souls;
         yield return Press(pad, GamepadButton.South); // UpgradeSubmit -> focus the Body rows
         yield return null;
 
-        Assert.AreEqual(onOpen.souls, SaveManager.LoadCharacter(character.characterID).souls,
+        Assert.AreEqual(soulsOnOpen, LoadCharacterSave(character.characterID).souls,
             "Submit on the category list spent souls — it should only move focus into the rows.");
         Shot("skilltree-rows-focused");
 
         // Cursor now sits on the first Body row, a real priced upgrade, so this Submit must both
         // advance its rank AND spend souls.
-        CharacterSaveData before = SaveManager.LoadCharacter(character.characterID);
+        CharacterSaveData before = LoadCharacterSave(character.characterID);
         int rankBefore = SkillTreeService.GetRank(before, "attributes", "strength_1");
         int soulsBefore = before.souls;
 
         yield return Press(pad, GamepadButton.South); // UpgradeSubmit -> buys the highlighted row
         yield return null;
 
-        CharacterSaveData after = SaveManager.LoadCharacter(character.characterID);
+        CharacterSaveData after = LoadCharacterSave(character.characterID);
         Assert.Greater(SkillTreeService.GetRank(after, "attributes", "strength_1"), rankBefore,
             "Buying the first Body row did not advance its rank.");
         Assert.Less(after.souls, soulsBefore, "Buying the first Body row did not spend any souls.");
@@ -72,7 +77,7 @@ public class SkillTreeUpgradeTests : HarnessFixture
         yield return Press(pad, GamepadButton.South);
         yield return null;
 
-        Assert.Greater(SkillTreeService.GetRank(SaveManager.LoadCharacter(character.characterID), "attributes", "health_1"), 0,
+        Assert.Greater(SkillTreeService.GetRank(LoadCharacterSave(character.characterID), "attributes", "health_1"), 0,
             "Down + Submit did not buy the second Body row — row navigation is broken.");
         Shot("skilltree-after-buy-second-row");
 
@@ -89,7 +94,7 @@ public class SkillTreeUpgradeTests : HarnessFixture
         yield return Press(pad, GamepadButton.South);
         yield return null;
 
-        CharacterSaveData afterUnlock = SaveManager.LoadCharacter(character.characterID);
+        CharacterSaveData afterUnlock = LoadCharacterSave(character.characterID);
         Assert.IsTrue(SkillTreeService.IsSkillUnlocked(character, afterUnlock, "whirlwind"),
             "Buying the Whirlwind Unlock row did not unlock the skill.");
         Shot("skilltree-after-unlock-whirlwind");
@@ -119,5 +124,21 @@ public class SkillTreeUpgradeTests : HarnessFixture
         FieldInfo field = typeof(CharacterSelectionManager).GetField("allCharacters", BindingFlags.NonPublic | BindingFlags.Instance);
         var roster = field?.GetValue(manager) as CharacterDefinition[];
         return roster != null && index < roster.Length ? roster[index] : null;
+    }
+
+    /// <summary>Same routing CharacterSelectionManager.LoadCharacterSave/CharacterStats.Record use —
+    /// see the note at this test's souls-seeding call site for why a direct SaveManager read/write
+    /// is not safe here anymore.</summary>
+    static CharacterSaveData LoadCharacterSave(string characterID)
+    {
+        return GameSaveController.Instance != null
+            ? GameSaveController.Instance.GetSharedRecord(characterID)
+            : SaveManager.LoadCharacter(characterID);
+    }
+
+    static void FlushCharacterSave(string characterID)
+    {
+        if (GameSaveController.Instance != null) GameSaveController.Instance.FlushCharacter(characterID);
+        else SaveManager.SaveCharacter(LoadCharacterSave(characterID));
     }
 }
